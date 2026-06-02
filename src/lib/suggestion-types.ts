@@ -1,0 +1,47 @@
+export type SuggestionVerdict = 'pending' | 'accepted' | 'rejected'
+
+export interface InlineDiff {
+  type: 'diff'
+  id: string
+  skillId: string
+  original: string
+  replacement: string
+  rationale?: string
+  verdict: SuggestionVerdict
+  model: string
+  tokens: number
+  cost_usd: number
+  latency_ms: number
+  created_at: string
+}
+
+export interface Annotation {
+  type: 'annotation'
+  id: string
+  skillId: string
+  text: string          // the flagged text span
+  message: string
+  severity?: 'high' | 'medium' | 'low'
+  suggestion?: string
+  verdict: SuggestionVerdict
+  model: string
+  tokens: number
+  cost_usd: number
+  latency_ms: number
+  created_at: string
+}
+
+export interface SidePanelItem {
+  type: 'sidepanel'
+  id: string
+  skillId: string
+  content: unknown      // parsed JSON from skill
+  verdict: SuggestionVerdict
+  model: string
+  tokens: number
+  cost_usd: number
+  latency_ms: number
+  created_at: string
+}
+
+export type Suggestion = InlineDiff | Annotation | SidePanelItem
