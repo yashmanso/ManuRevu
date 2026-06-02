@@ -11,6 +11,7 @@ export interface EditorHandle {
   getHTML: () => string
   getSelectedText: () => string
   setContent: (html: string) => void
+  deleteBeforeCursor: (charCount: number) => void
 }
 
 interface EditorProps {
@@ -64,6 +65,11 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       return editor.state.doc.textBetween(from, to, ' ')
     },
     setContent: (html: string) => editor?.commands.setContent(html),
+    deleteBeforeCursor: (charCount: number) => {
+      if (!editor) return
+      const { from } = editor.state.selection
+      editor.commands.deleteRange({ from: Math.max(0, from - charCount), to: from })
+    },
   }))
 
   useEffect(() => {

@@ -92,7 +92,10 @@ export default function Home() {
   void manuscriptId
 
   const runSkill = useCallback(async (skill: Skill) => {
+    const queryLen = slashMenu.query.length
     setSlashMenu(m => ({ ...m, open: false }))
+    // Delete the "/" + any query characters the user typed
+    editorRef.current?.deleteBeforeCursor(1 + queryLen)
     const manuscript = editorRef.current?.getMarkdown() ?? ''
     if (!manuscript.trim()) return
 
@@ -169,7 +172,7 @@ export default function Home() {
       setRunStatus('idle')
       setActiveRunLabel('')
     }
-  }, [])
+  }, [slashMenu.query]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAccept = useCallback(async (id: string) => {
     setSuggestions(prev => prev.map(s => s.id === id ? { ...s, verdict: 'accepted' as const } : s))
@@ -229,15 +232,18 @@ export default function Home() {
           <Button size="sm" variant="outline" onClick={() => setShowSettings(true)} className="text-xs">
             Settings
           </Button>
-          {runStatus === 'running' && (
-            <div className="flex items-center gap-2 ml-auto">
-              <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs text-neutral-500">Running {activeRunLabel}…</span>
-            </div>
-          )}
-          <span className="ml-auto text-xs text-neutral-400">Type / to run a skill</span>
+          <span className="ml-auto text-xs text-neutral-400">
+            {runStatus === 'idle' ? 'Type / to run a skill' : ''}
+          </span>
         </div>
-
+        {/* Running banner — visible across full editor width */}
+        {runStatus === 'running' && (
+          <div className="flex items-center gap-2 px-6 py-2 bg-blue-50 border-b border-blue-200 shrink-0">
+            <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-blue-700 font-medium">Running <span className="font-semibold">{activeRunLabel}</span>…</span>
+            <span className="text-xs text-blue-400 ml-1">Results will appear in the sidebar</span>
+          </div>
+        )}
         {/* Editor */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
           <Editor ref={editorRef} />
