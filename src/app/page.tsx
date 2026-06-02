@@ -9,6 +9,7 @@ import SlashMenu from '@/components/SlashMenu'
 import type { EditorHandle } from '@/components/Editor'
 import type { Suggestion, Annotation, SidePanelItem } from '@/lib/suggestion-types'
 import { importFile } from '@/lib/import'
+import SettingsPanel from '@/components/SettingsPanel'
 
 // Editor uses browser APIs — load client-side only
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false })
@@ -43,6 +44,7 @@ export default function Home() {
   })
   const [hasSelection, setHasSelection] = useState(false)
   const [manuscriptId] = useState(() => genId())
+  const [showSettings, setShowSettings] = useState(false)
 
   // Load skills on mount
   useEffect(() => {
@@ -218,6 +220,9 @@ export default function Home() {
             Import .docx / .txt
           </Button>
           <input ref={fileInputRef} type="file" accept=".docx,.txt,.md" className="hidden" onChange={handleFileUpload} />
+          <Button size="sm" variant="outline" onClick={() => setShowSettings(true)} className="text-xs">
+            Settings
+          </Button>
           {runStatus === 'running' && (
             <div className="flex items-center gap-2 ml-auto">
               <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -260,6 +265,8 @@ export default function Home() {
           onClose={() => setSlashMenu(m => ({ ...m, open: false }))}
         />
       )}
+
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
     </div>
   )
 }

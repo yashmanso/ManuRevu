@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { loadSkill } from '@/lib/skills'
 import { runLLM } from '@/lib/llm'
+import { resolveCitation } from '@/lib/citations'
 
 const RequestSchema = z.object({
   manuscript: z.string().min(1),
@@ -66,10 +67,35 @@ export async function POST(
     }
   } else {
     // Single-pass
-    const userContent = [
-      selection ? `SELECTED TEXT:\n${selection}` : null,
-      `MANUSCRIPT:\n${manuscript}`,
-    ].filter(Boolean).join('\n\n')
+    let userContent: string
+
+    if (skill.id === 'citation-claim' && selection) {
+      // Extract first Author-Year citation from selection
+      const citationMatch = selection.match(/([A-Z][a-zA-Z'-]+(?:\s+et\s+al\.?|(?:\s+[&]\s+[A-Z][a-zA-Z'-]+))?,?\s+\d{4}[a-z]?)/)
+      if (citationMatch) {
+        const citationString = citationMatch[1]
+        const resolved = await resolveCitation(citationString)
+        const sourceText = resolved.full_text ?? resolved.abstract
+        const sourceBlock = sourceText
+          ? `Title: ${resolved.title ?? 'Unknown'}\n${sourceText.slice(0, 3000)}`
+          : 'Source not available — verdict must be source_unavailable'
+        userContent = [
+          `MANUSCRIPT CLAIM CONTEXT:\n${selection}`,
+          `CITED PAPER SOURCE:\n${sourceBlock}`,
+          `CITATION: ${citationString}`,
+        ].join('\n\n')
+      } else {
+        userContent = [
+          `SELECTED TEXT:\n${selection}`,
+          `MANUSCRIPT:\n${manuscript}`,
+        ].join('\n\n')
+      }
+    } else {
+      userContent = [
+        selection ? `SELECTED TEXT:\n${selection}` : null,
+        `MANUSCRIPT:\n${manuscript}`,
+      ].filter(Boolean).join('\n\n')
+    }
 
     const run = await runLLM({
       tier: skill.tier,

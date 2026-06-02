@@ -15,7 +15,7 @@ function getClient(): OpenAI {
     baseURL: OPENROUTER_BASE_URL,
     apiKey,
     defaultHeaders: {
-      'HTTP-Referer': 'http://localhost:3000',
+      'HTTP-Referer': 'http://localhost:2323',
       'X-Title': 'ManuRevu',
     },
   })
