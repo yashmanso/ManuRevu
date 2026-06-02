@@ -59,7 +59,13 @@ export default function Home() {
         if (!sel || sel.rangeCount === 0) return
         const range = sel.getRangeAt(0)
         const rect = range.getBoundingClientRect()
-        setSlashMenu({ open: true, position: { top: rect.bottom + 8, left: rect.left }, query: '' })
+        const menuHeight = 320
+        const spaceBelow = window.innerHeight - rect.bottom
+        const top = spaceBelow < menuHeight + 16
+          ? Math.max(8, rect.top - menuHeight - 8)
+          : rect.bottom + 8
+        const left = Math.min(rect.left, window.innerWidth - 320 - 16)
+        setSlashMenu({ open: true, position: { top, left }, query: '' })
       } else if (slashMenu.open) {
         if (e.key === 'Backspace') {
           setSlashMenu(m => ({ ...m, query: m.query.slice(0, -1) }))
