@@ -13,6 +13,7 @@ import PromptEditor from '@/components/PromptEditor'
 import type { EditorHandle } from '@/components/Editor'
 import type { Suggestion, Annotation, SidePanelItem } from '@/lib/suggestion-types'
 import { importFile } from '@/lib/import'
+import { toast } from 'sonner'
 import { computeStats } from '@/lib/manuscript-stats'
 import { splitSections } from '@/lib/sections'
 import SettingsPanel from '@/components/SettingsPanel'
@@ -257,6 +258,8 @@ export default function Home() {
         result = String(data.result)
       }
 
+      const costNote = `${data.usage.total_tokens} tokens · $${data.usage.estimated_cost_usd.toFixed(4)}`
+
       if (skill.output === 'annotation') {
         let parsed: { issues?: Array<{ text?: string; sentence?: string; message?: string; reason?: string; suggestion?: string; explanation?: string }> }
         try { parsed = JSON.parse(result) } catch { parsed = {} }
@@ -270,14 +273,28 @@ export default function Home() {
           suggestion: issue.suggestion,
         }))
         setSuggestions(prev => [...prev, ...newItems])
+        if (newItems.length === 0) {
+          toast.success(`${skill.name}: no issues found`, { description: costNote })
+        } else {
+          toast.success(`${skill.name}: ${newItems.length} suggestion${newItems.length === 1 ? '' : 's'}`, {
+            description: `See the review queue. ${costNote}`,
+          })
+        }
       } else if (skill.output === 'sidepanel') {
         let parsed: unknown
         try { parsed = JSON.parse(result) } catch { parsed = result }
         const item: SidePanelItem = { ...baseAttrs, type: 'sidepanel', content: parsed }
         setSuggestions(prev => [...prev, item])
+        toast.success(`${skill.name} complete`, { description: `See the review queue. ${costNote}` })
       }
     } catch (err) {
       console.error('Skill run failed:', err)
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`${skill.name} failed`, {
+        description: /OPENROUTER_API_KEY/.test(msg)
+          ? 'OPENROUTER_API_KEY is not set. Add it to .env.local and restart the dev server.'
+          : msg.slice(0, 200),
+      })
     } finally {
       setRunStatus('idle')
       setActiveRunLabel('')
@@ -290,10 +307,15 @@ export default function Home() {
     // Delete the "/" + any query characters the user typed
     editorRef.current?.deleteBeforeCursor(1 + queryLen)
     const manuscript = scopedManuscript()
-    if (!manuscript.trim()) return
+    if (!manuscript.trim()) {
+      toast.warning('Add some manuscript text before running a skill', {
+        description: selectedSectionIds.size > 0 ? 'The selected sections appear to be empty.' : 'The editor is empty.',
+      })
+      return
+    }
 
     if (!apiEnabled) {
-      alert('API is disabled in settings')
+      toast.error('API is disabled', { description: 'Re-enable it with the “API off” toggle in the toolbar.' })
       return
     }
 
@@ -319,7 +341,7 @@ export default function Home() {
     }
 
     await executeRun(skill, manuscript, selection)
-  }, [slashMenu.query, apiEnabled, previewPrompt, scopedManuscript, executeRun])
+  }, [slashMenu.query, apiEnabled, previewPrompt, scopedManuscript, executeRun, selectedSectionIds])
 
   const handleAccept = useCallback(async (id: string) => {
     setSuggestions(prev => prev.map(s => s.id === id ? { ...s, verdict: 'accepted' as const } : s))
