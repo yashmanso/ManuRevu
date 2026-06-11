@@ -8,8 +8,10 @@ export const SkillSchema = z.object({
   model_override: z.string().optional(),
   scope: z.enum(['full', 'selection', 'section']),
   output: z.enum(['diff', 'annotation', 'sidepanel']),
+  local: z.boolean().optional(),
 })
 
 export type Skill = z.infer<typeof SkillSchema> & {
   body: string  // the markdown prompt body
+  local?: boolean
 }

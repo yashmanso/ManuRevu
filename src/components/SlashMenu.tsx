@@ -10,6 +10,7 @@ interface Skill {
   tier: 'structural' | 'writing'
   scope: 'full' | 'selection' | 'section'
   output: 'diff' | 'annotation' | 'sidepanel'
+  local?: boolean
 }
 
 interface SlashMenuProps {
@@ -78,8 +79,11 @@ export default function SlashMenu({ skills, hasSelection, position, query, onSel
                     ✎
                   </span>
                 )}
-                <Badge variant={skill.tier === 'structural' ? 'secondary' : 'default'} className="text-xs">
-                  {skill.tier}
+                <Badge
+                  variant="secondary"
+                  className={`text-xs ${skill.local ? 'bg-green-100 text-green-700 border border-green-200' : ''}`}
+                >
+                  {skill.local ? 'local' : skill.tier}
                 </Badge>
               </span>
             </div>

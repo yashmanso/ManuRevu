@@ -5,6 +5,7 @@ description: Flags commonly confused or imprecise academic word choices (impact 
 tier: structural
 scope: full
 output: annotation
+local: true
 ---
 You are an academic copy editor specialising in precise word choice. Scan the manuscript for commonly confused or imprecise academic word choices, including but not limited to:
 

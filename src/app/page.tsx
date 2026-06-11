@@ -17,6 +17,7 @@ import { toast } from 'sonner'
 import { computeStats } from '@/lib/manuscript-stats'
 import { splitSections } from '@/lib/sections'
 import SettingsPanel from '@/components/SettingsPanel'
+import { runLocalSkill } from '@/lib/local-skills/index'
 
 // Editor uses browser APIs — load client-side only
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false })
@@ -28,6 +29,7 @@ interface Skill {
   tier: 'structural' | 'writing'
   scope: 'full' | 'selection' | 'section'
   output: 'diff' | 'annotation' | 'sidepanel'
+  local?: boolean
 }
 
 type RunStatus = 'idle' | 'running'
@@ -311,6 +313,36 @@ export default function Home() {
       toast.warning('Add some manuscript text before running a skill', {
         description: selectedSectionIds.size > 0 ? 'The selected sections appear to be empty.' : 'The editor is empty.',
       })
+      return
+    }
+
+    // Run local skills without any API call
+    if (skill.local) {
+      const localResult = runLocalSkill(skill.id, manuscript, editorRef.current?.getSelectedText() || undefined)
+      if (localResult) {
+        const newItems: Annotation[] = localResult.issues.map((issue) => ({
+          id: genId(),
+          skillId: skill.id,
+          model: 'local',
+          tokens: 0,
+          cost_usd: 0,
+          latency_ms: 0,
+          verdict: 'pending' as const,
+          created_at: new Date().toISOString(),
+          type: 'annotation' as const,
+          text: issue.sentence ?? issue.text ?? '',
+          message: issue.reason ?? issue.explanation ?? '',
+          suggestion: issue.suggestion,
+        }))
+        setSuggestions(prev => [...prev, ...newItems])
+        if (newItems.length === 0) {
+          toast.success(`${skill.name}: no issues found`, { description: 'Run locally — no API cost.' })
+        } else {
+          toast.success(`${skill.name}: ${newItems.length} suggestion${newItems.length === 1 ? '' : 's'}`, {
+            description: `Local · no API cost`,
+          })
+        }
+      }
       return
     }
 
