@@ -77,6 +77,12 @@ export function setCachedCitation(raw: string, resolved: import('./citation-type
     .run(raw, JSON.stringify({ ...resolved, cached_at: now }), now)
 }
 
+export function clearCitationCache(): number {
+  const db = getDb()
+  const result = db.prepare('DELETE FROM citation_cache').run()
+  return result.changes
+}
+
 export function indexPdf(entry: { id: string; file_path: string; title?: string; authors?: string; year?: number; doi?: string; text_excerpt?: string }): void {
   const db = getDb()
   const now = new Date().toISOString()

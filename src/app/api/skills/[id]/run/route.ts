@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { loadSkill } from '@/lib/skills'
 import { runLLM } from '@/lib/llm'
 import { resolveCitation } from '@/lib/citations'
+import { getSetting } from '@/lib/settings-store'
 
 const RequestSchema = z.object({
   manuscript: z.string().min(1),
@@ -11,11 +12,12 @@ const RequestSchema = z.object({
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const skill = loadSkill(params.id)
+  const { id } = await params
+  const skill = loadSkill(id)
   if (!skill) {
-    return NextResponse.json({ error: `Skill '${params.id}' not found` }, { status: 404 })
+    return NextResponse.json({ error: `Skill '${id}' not found` }, { status: 404 })
   }
 
   const body = await req.json()
@@ -25,6 +27,10 @@ export async function POST(
   }
 
   const { manuscript, selection } = parsed.data
+
+  // Skill-level model_override wins; otherwise use the settings-level tier override
+  const tierOverride = getSetting(skill.tier === 'structural' ? 'structural_model' : 'writing_model')
+  const modelOverride = skill.model_override ?? tierOverride ?? undefined
 
   // For two-pass skills (argument-consistency), body contains ---PASS2--- separator
   const passes = skill.body.split(/\n---PASS2---\n/)
@@ -44,7 +50,7 @@ export async function POST(
 
     const pass1 = await runLLM({
       tier: skill.tier,
-      model_override: skill.model_override,
+      model_override: modelOverride,
       system: pass1Prompt,
       user: userContent1,
     })
@@ -53,7 +59,7 @@ export async function POST(
 
     const pass2 = await runLLM({
       tier: skill.tier,
-      model_override: skill.model_override,
+      model_override: modelOverride,
       system: pass2Prompt,
       user: userContent2,
     })
@@ -99,7 +105,7 @@ export async function POST(
 
     const run = await runLLM({
       tier: skill.tier,
-      model_override: skill.model_override,
+      model_override: modelOverride,
       system: skill.body,
       user: userContent,
     })
@@ -113,6 +119,6 @@ export async function POST(
     result: finalResult,
     usage: totalUsage,
     latency_ms: Date.now() - startTime,
-    model: skill.model_override ?? (skill.tier === 'structural' ? 'google/gemini-flash-1.5' : 'google/gemini-pro-1.5'),
+    model: modelOverride ?? (skill.tier === 'structural' ? 'google/gemini-flash-1.5' : 'google/gemini-pro-1.5'),
   })
 }

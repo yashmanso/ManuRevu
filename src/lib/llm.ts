@@ -46,6 +46,9 @@ export interface LLMUsage {
 const MODEL_COSTS: Record<string, [number, number]> = {
   'google/gemini-flash-1.5': [0.075, 0.30],
   'google/gemini-pro-1.5': [1.25, 5.00],
+  'anthropic/claude-3.5-sonnet': [3.00, 15.00],
+  'openai/gpt-4o': [2.50, 10.00],
+  'meta-llama/llama-3.1-8b-instruct': [0.06, 0.06],
 }
 
 function estimateCost(model: string, promptTokens: number, completionTokens: number): number {

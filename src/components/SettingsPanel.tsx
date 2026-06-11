@@ -7,7 +7,17 @@ interface Settings {
   citation_backend?: string
   scite_api_key?: string
   pdf_watch_folder?: string
+  structural_model?: string
+  writing_model?: string
 }
+
+const MODEL_OPTIONS: { value: string; label: string }[] = [
+  { value: 'google/gemini-flash-1.5', label: 'Gemini Flash 1.5 ($0.075 / $0.30 per M)' },
+  { value: 'google/gemini-pro-1.5', label: 'Gemini Pro 1.5 ($1.25 / $5 per M)' },
+  { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet ($3 / $15 per M)' },
+  { value: 'openai/gpt-4o', label: 'GPT-4o ($2.50 / $10 per M)' },
+  { value: 'meta-llama/llama-3.1-8b-instruct', label: 'Llama 3.1 8B ($0.06 / $0.06 per M)' },
+]
 
 interface SettingsPanelProps {
   onClose: () => void
@@ -19,6 +29,8 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [reindexing, setReindexing] = useState(false)
   const [reindexCount, setReindexCount] = useState<number | null>(null)
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
+  const [cacheCleared, setCacheCleared] = useState<number | null>(null)
+  const [clearingCache, setClearingCache] = useState(false)
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(setSettings).catch(console.error)
@@ -64,6 +76,18 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     }
   }
 
+  const clearCache = async () => {
+    setClearingCache(true)
+    setCacheCleared(null)
+    try {
+      const res = await fetch('/api/citations/cache', { method: 'DELETE' })
+      const data = await res.json() as { deleted: number }
+      setCacheCleared(data.deleted)
+    } finally {
+      setClearingCache(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
@@ -71,6 +95,32 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           <h2 className="text-lg font-semibold text-neutral-800">Settings</h2>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 text-xl leading-none">×</button>
         </div>
+
+        {/* Model tier overrides */}
+        <section className="mb-6">
+          <h3 className="text-sm font-medium text-neutral-700 mb-3">Models</h3>
+          <div className="mb-3">
+            <label className="block text-xs text-neutral-600 mb-1">Structural model (fast checks)</label>
+            <select
+              value={settings.structural_model ?? 'google/gemini-flash-1.5'}
+              onChange={e => setSettings(s => ({ ...s, structural_model: e.target.value }))}
+              className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
+            >
+              {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-neutral-600 mb-1">Writing model (deep review)</label>
+            <select
+              value={settings.writing_model ?? 'google/gemini-pro-1.5'}
+              onChange={e => setSettings(s => ({ ...s, writing_model: e.target.value }))}
+              className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
+            >
+              {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <p className="text-xs text-neutral-400 mt-1">Prices shown as input / output per million tokens. Skill-level overrides still take precedence.</p>
+        </section>
 
         {/* Citation backend */}
         <section className="mb-6">
@@ -138,6 +188,19 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               <input type="file" accept=".pdf" className="hidden" onChange={uploadPdf} />
             </label>
             {uploadStatus && <span className="ml-2 text-xs text-neutral-500">{uploadStatus}</span>}
+          </div>
+        </section>
+
+        {/* Cache management */}
+        <section className="mb-6">
+          <h3 className="text-sm font-medium text-neutral-700 mb-3">Cache</h3>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={clearCache} disabled={clearingCache}>
+              {clearingCache ? 'Clearing…' : 'Clear citation cache'}
+            </Button>
+            {cacheCleared !== null && (
+              <span className="text-xs text-green-600">Cleared {cacheCleared} entr{cacheCleared === 1 ? 'y' : 'ies'}</span>
+            )}
           </div>
         </section>
 

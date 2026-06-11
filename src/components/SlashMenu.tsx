@@ -19,9 +19,10 @@ interface SlashMenuProps {
   query: string
   onSelect: (skill: Skill) => void
   onClose: () => void
+  onEditPrompt?: (skill: Skill) => void
 }
 
-export default function SlashMenu({ skills, hasSelection, position, query, onSelect, onClose }: SlashMenuProps) {
+export default function SlashMenu({ skills, hasSelection, position, query, onSelect, onClose, onEditPrompt }: SlashMenuProps) {
   const [activeIndex, setActiveIndex] = useState(0)
 
   const filtered = skills.filter(s => {
@@ -64,9 +65,23 @@ export default function SlashMenu({ skills, hasSelection, position, query, onSel
           >
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-neutral-900">{skill.name}</span>
-              <Badge variant={skill.tier === 'structural' ? 'secondary' : 'default'} className="text-xs">
-                {skill.tier}
-              </Badge>
+              <span className="flex items-center gap-1.5">
+                {onEditPrompt && (
+                  <span
+                    role="button"
+                    tabIndex={-1}
+                    title="Edit prompt"
+                    aria-label={`Edit prompt for ${skill.name}`}
+                    className="text-neutral-300 hover:text-neutral-600 transition-colors text-xs leading-none"
+                    onClick={e => { e.stopPropagation(); onEditPrompt(skill) }}
+                  >
+                    ✎
+                  </span>
+                )}
+                <Badge variant={skill.tier === 'structural' ? 'secondary' : 'default'} className="text-xs">
+                  {skill.tier}
+                </Badge>
+              </span>
             </div>
             <span className="text-xs text-neutral-500 line-clamp-1">{skill.description}</span>
           </button>
