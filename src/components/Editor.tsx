@@ -6,8 +6,9 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Highlight from '@tiptap/extension-highlight'
 import { TextSelection, Plugin, PluginKey } from 'prosemirror-state'
 import { Decoration, DecorationSet } from 'prosemirror-view'
+import type { EditorView } from 'prosemirror-view'
 import type { Node as PMNode } from 'prosemirror-model'
-import { useEffect, forwardRef, useImperativeHandle } from 'react'
+import { useEffect, useRef, useMemo, forwardRef, useImperativeHandle } from 'react'
 
 export interface HighlightSpan {
   id: string
@@ -61,31 +62,69 @@ function htmlToMarkdown(html: string): string {
 }
 
 /**
+ * Normalize pasted text from PDFs and other sources:
+ * - Fix soft-hyphen line breaks (word-\n → word-)
+ * - Remove mid-sentence line breaks (single \n that aren't paragraph boundaries)
+ * - Normalize multiple spaces
+ * - Fix common ligatures (ﬁ→fi, ﬂ→fl, etc.)
+ * - Strip null bytes and other non-printable control characters
+ */
+function normalizePastedText(text: string): string {
+  return text
+    // Fix ligatures
+    .replace(/ﬁ/g, 'fi')
+    .replace(/ﬂ/g, 'fl')
+    .replace(/ﬀ/g, 'ff')
+    .replace(/ﬃ/g, 'ffi')
+    .replace(/ﬄ/g, 'ffl')
+    .replace(/ﬅ/g, 'st')
+    .replace(/ﬆ/g, 'st')
+    // Soft hyphens and zero-width characters
+    .replace(/­/g, '')  // soft hyphen
+    .replace(/​/g, '')  // zero-width space
+    .replace(/‌/g, '')  // zero-width non-joiner
+    .replace(/‍/g, '')  // zero-width joiner
+    .replace(/﻿/g, '')  // BOM / zero-width no-break space
+    // Fix PDF line-break artifacts: word split across lines with hyphen
+    .replace(/(\w)-\n(\w)/g, '$1$2')
+    // Remove single line breaks in the middle of sentences (PDF column artifacts)
+    // Preserve double line breaks (paragraph boundaries)
+    .replace(/([^\n])\n(?!\n)([^\n])/g, '$1 $2')
+    // Collapse multiple spaces (but preserve intentional indentation? No — academic manuscripts don't use it)
+    .replace(/[ \t]+/g, ' ')
+    // Strip null bytes and non-printable ASCII (except tab, LF, CR)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    // Normalize line endings
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    // Collapse 3+ consecutive newlines to 2
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
  * Build the canonical plain-text view of the document along with a mapping
  * from each plain-text char index to its ProseMirror position.
- *
- * This is THE single source of truth for text<->position. Skills must run on
- * the string returned here so that any span they report is a verbatim
- * substring, making select/replace exact (no fuzzy matching).
  *
  * Block boundaries insert a single '\n' so sentences don't merge across
  * paragraphs; that '\n' maps to the block's start position.
  */
 function buildTextIndex(doc: PMNode): { text: string; map: number[] } {
-  let text = ''
-  const map: number[] = [] // map[i] = PM pos of plain char i
+  const parts: string[] = []
+  const map: number[] = []
   doc.descendants((node, pos) => {
     if (node.isText && node.text) {
+      // Process entire text node at once — far faster than char-by-char += on large docs
+      parts.push(node.text)
       for (let k = 0; k < node.text.length; k++) {
-        text += node.text[k]
         map.push(pos + k)
       }
-    } else if (node.isBlock && text.length > 0 && !text.endsWith('\n')) {
-      text += '\n'
+    } else if (node.isBlock && map.length > 0 && parts[parts.length - 1] !== '\n') {
+      parts.push('\n')
       map.push(pos)
     }
   })
-  return { text, map }
+  return { text: parts.join(''), map }
 }
 
 /** Map a plain-text [from,to) range to ProseMirror positions. */
@@ -100,6 +139,43 @@ function rangeToPM(map: number[], from: number, to: number): { pmFrom: number; p
 const highlightKey = new PluginKey<DecorationSet>('manurevu-highlights')
 
 const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange, onReady, onHighlightClick }, ref) => {
+  // Keep latest callbacks in refs so editorProps stays stable across renders
+  const onChangeRef = useRef(onChange)
+  const onReadyRef = useRef(onReady)
+  const onHighlightClickRef = useRef(onHighlightClick)
+  onChangeRef.current = onChange
+  onReadyRef.current = onReady
+  onHighlightClickRef.current = onHighlightClick
+
+  // Stable editorProps object — recreating this on every render caused TipTap v3
+  // to call setOptions → view.setProps + view.updateState on every React render.
+  const editorProps = useMemo(() => ({
+    attributes: {
+      class: 'prose prose-neutral max-w-none focus:outline-none min-h-[60vh] px-8 py-6 dark:prose-invert',
+    },
+    handleClickOn(_view: EditorView, _pos: number, _node: PMNode, _nodePos: number, event: MouseEvent) {
+      const target = event.target as HTMLElement
+      const id = target?.closest('[data-mr-highlight]')?.getAttribute('data-mr-highlight')
+      if (id) {
+        onHighlightClickRef.current?.(id)
+        return true
+      }
+      return false
+    },
+    handlePaste(view: EditorView, event: ClipboardEvent): boolean {
+      const plain = event.clipboardData?.getData('text/plain')
+      if (!plain) return false
+      const normalized = normalizePastedText(plain)
+      // Only intercept if normalization changed something
+      if (normalized === plain) return false
+      event.preventDefault()
+      const { from, to } = view.state.selection
+      view.dispatch(view.state.tr.insertText(normalized, from, to))
+      return true
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []) // intentionally empty — callbacks go through refs
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -108,24 +184,11 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
     ],
     content: initialContent ?? '',
     immediatelyRender: false,
-    editorProps: {
-      attributes: {
-        class: 'prose prose-neutral max-w-none focus:outline-none min-h-[60vh] px-8 py-6',
-      },
-      handleClickOn(_view, _pos, _node, _nodePos, event) {
-        const target = event.target as HTMLElement
-        const id = target?.closest('[data-mr-highlight]')?.getAttribute('data-mr-highlight')
-        if (id) {
-          onHighlightClick?.(id)
-          return true
-        }
-        return false
-      },
+    editorProps,
+    onUpdate({ editor: e }) {
+      onChangeRef.current?.(htmlToMarkdown(e.getHTML()))
     },
-    onUpdate({ editor }) {
-      onChange?.(htmlToMarkdown(editor.getHTML()))
-    },
-    onCreate({ editor }) {
+    onCreate({ editor: e }) {
       // Register the decoration plugin once the view exists.
       const plugin = new Plugin<DecorationSet>({
         key: highlightKey,
@@ -143,8 +206,8 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
           },
         },
       })
-      editor.registerPlugin(plugin)
-      onReady?.()
+      e.registerPlugin(plugin)
+      onReadyRef.current?.()
     },
   })
 
@@ -196,7 +259,6 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       for (const span of spans) {
         if (!span.match) continue
         let searchFrom = 0
-        // Find the first occurrence not already used by an earlier span.
         for (;;) {
           const idx = text.indexOf(span.match, searchFrom)
           if (idx === -1) break
@@ -231,14 +293,14 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       editor.view.focus()
       return true
     },
-  }))
+  }), [editor])
 
   useEffect(() => {
     return () => { editor?.destroy() }
   }, [editor])
 
   return (
-    <div className="w-full bg-white rounded-lg border border-neutral-200 shadow-sm">
+    <div className="w-full bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 shadow-sm">
       <EditorContent editor={editor} />
     </div>
   )

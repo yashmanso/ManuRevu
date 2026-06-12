@@ -86,6 +86,7 @@ export default function Home() {
   const [markdown, setMarkdown] = useState('')
   const [longSentenceThreshold, setLongSentenceThreshold] = useState(35)
   const [selectedSectionIds, setSelectedSectionIds] = useState<Set<string>>(new Set())
+  const [darkMode, setDarkMode] = useState(false)
 
   // Toolbar settings
   const [apiEnabled, setApiEnabled] = useState(true)
@@ -94,6 +95,11 @@ export default function Home() {
   // Modals
   const [pendingPreview, setPendingPreview] = useState<PendingPreview | null>(null)
   const [editPromptSkill, setEditPromptSkill] = useState<Skill | null>(null)
+
+  // Dark mode — toggle class on <html> element
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode)
+  }, [darkMode])
 
   // Persistence
   const [saveState, setSaveState] = useState<SaveState>('idle')
@@ -343,19 +349,18 @@ export default function Home() {
     setSlashMenu(m => ({ ...m, open: false }))
     // Delete the "/" + any query characters the user typed
     editorRef.current?.deleteBeforeCursor(1 + queryLen)
-    const manuscript = scopedManuscript()
-    if (!manuscript.trim()) {
-      toast.warning('Add some manuscript text before running a skill', {
-        description: selectedSectionIds.size > 0 ? 'The selected sections appear to be empty.' : 'The editor is empty.',
-      })
-      return
-    }
 
     // Run local skills without any API call.
-    // Local skills operate on the editor's exact plain text so every `match`
-    // is a verbatim substring — this is what makes Jump and Accept exact.
+    // For local skills we only need getPlainText() — skipping getMarkdown() / getHTML()
+    // on large documents prevents a costly DOM serialization on every skill click.
     if (skill.local || LOCAL_SKILL_IDS.has(skill.id)) {
       const plainText = editorRef.current?.getPlainText() ?? ''
+      if (!plainText.trim()) {
+        toast.warning('Add some manuscript text before running a skill', {
+          description: 'The editor is empty.',
+        })
+        return
+      }
       const localResult = runLocalSkill(skill.id, plainText, longSentenceThreshold)
       if (localResult) {
         const newItems: Annotation[] = localResult.issues.map((issue) => ({
@@ -388,6 +393,15 @@ export default function Home() {
 
     if (!apiEnabled) {
       toast.error('API is disabled', { description: 'Re-enable it with the “API off” toggle in the toolbar.' })
+      return
+    }
+
+    // LLM skills need the full markdown — only compute it here, not for local skills
+    const manuscript = scopedManuscript()
+    if (!manuscript.trim()) {
+      toast.warning('Add some manuscript text before running a skill', {
+        description: selectedSectionIds.size > 0 ? 'The selected sections appear to be empty.' : 'The editor is empty.',
+      })
       return
     }
 
@@ -476,12 +490,12 @@ export default function Home() {
   }, [handleEditorChange])
 
   return (
-    <div className="flex h-screen bg-neutral-50 overflow-hidden">
+    <div className="flex h-screen bg-neutral-50 dark:bg-neutral-950 overflow-hidden">
       {/* Main editor area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Toolbar */}
-        <div className="flex items-center gap-3 px-6 py-3 bg-white border-b border-neutral-200 shrink-0">
-          <span className="font-semibold text-neutral-800 mr-2">ManuRevu</span>
+        <div className="flex items-center gap-3 px-6 py-3 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
+          <span className="font-semibold text-neutral-800 dark:text-neutral-100 mr-2">ManuRevu</span>
           <Button
             size="sm"
             variant="outline"
@@ -494,6 +508,13 @@ export default function Home() {
           <Button size="sm" variant="outline" onClick={() => setShowSettings(true)} className="text-xs">
             Settings
           </Button>
+          <button
+            onClick={() => setDarkMode(d => !d)}
+            title="Toggle dark mode"
+            className="px-2 py-0.5 rounded-full text-xs font-medium border transition-colors bg-neutral-100 text-neutral-600 border-neutral-200 hover:bg-neutral-200 dark:bg-neutral-700 dark:text-neutral-300 dark:border-neutral-600 dark:hover:bg-neutral-600"
+          >
+            {darkMode ? '☀ Light' : '☾ Dark'}
+          </button>
           {/* API enabled toggle */}
           <button
             onClick={toggleApiEnabled}
@@ -544,15 +565,15 @@ export default function Home() {
           </div>
         )}
         {/* Editor */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 py-4 bg-neutral-50 dark:bg-neutral-950">
           <Editor ref={editorRef} onChange={handleEditorChange} onReady={handleEditorReady} onHighlightClick={handleHighlightClick} />
         </div>
       </div>
 
       {/* Sidebar */}
-      <div className="w-80 shrink-0 border-l border-neutral-200 bg-white overflow-y-auto">
-        <div className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between">
-          <span className="text-sm font-medium text-neutral-700">Review Queue</span>
+      <div className="w-80 shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 overflow-y-auto">
+        <div className="px-4 py-3 border-b border-neutral-100 dark:border-neutral-700 flex items-center justify-between">
+          <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">Review Queue</span>
           <Badge variant="secondary" className="text-xs">
             {suggestions.filter(s => s.verdict === 'pending').length} pending
           </Badge>
