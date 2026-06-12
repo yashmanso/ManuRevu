@@ -5,5 +5,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const skills = loadSkills()
-  return NextResponse.json(skills.map(({ body: _body, ...s }) => s))
+  const out = skills.map(({ body: _body, ...s }) => s)
+  console.log('[skills API]', JSON.stringify(out.map(s => ({ id: s.id, local: s.local }))))
+  return NextResponse.json(out)
 }
