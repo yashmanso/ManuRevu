@@ -4,6 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Highlight from '@tiptap/extension-highlight'
+import { Selection } from '@tiptap/pm/state'
 import { useEffect, forwardRef, useImperativeHandle } from 'react'
 
 export interface EditorHandle {
@@ -91,12 +92,11 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
         const index = fullText.indexOf(chunk)
         if (index !== -1) {
           console.log('[Jump] Found match (length', len, ') at index:', index)
-          // Select from this position and extend ~100 chars for context
+          // Select from this position and extend ~200 chars for context
           const endPos = Math.min(index + 200, fullText.length)
-          editor.commands.setSelection({ from: index, to: endPos })
-          setTimeout(() => {
-            editor.view.dispatch(editor.state.tr.scrollIntoView())
-          }, 0)
+          const selection = Selection.create(editor.state.doc, index, endPos)
+          const tr = editor.state.tr.setSelection(selection)
+          editor.view.dispatch(tr.scrollIntoView())
           return true
         }
       }
@@ -106,10 +106,10 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       const lastIndex = fullText.indexOf(lastTry)
       if (lastIndex !== -1) {
         console.log('[Jump] Found with 30-char fallback at:', lastIndex)
-        editor.commands.setSelection({ from: lastIndex, to: lastIndex + 200 })
-        setTimeout(() => {
-          editor.view.dispatch(editor.state.tr.scrollIntoView())
-        }, 0)
+        const endPos = Math.min(lastIndex + 200, fullText.length)
+        const selection = Selection.create(editor.state.doc, lastIndex, endPos)
+        const tr = editor.state.tr.setSelection(selection)
+        editor.view.dispatch(tr.scrollIntoView())
         return true
       }
 
