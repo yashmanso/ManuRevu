@@ -17,6 +17,7 @@ export interface EditorHandle {
 interface EditorProps {
   initialContent?: string
   onChange?: (markdown: string) => void
+  onReady?: () => void
 }
 
 // Simple HTML→Markdown conversion sufficient for academic prose
@@ -38,7 +39,7 @@ function htmlToMarkdown(html: string): string {
     .trim()
 }
 
-const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange }, ref) => {
+const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange, onReady }, ref) => {
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -46,6 +47,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       Highlight.configure({ multicolor: true }),
     ],
     content: initialContent ?? '',
+    immediatelyRender: false,
     editorProps: {
       attributes: {
         class: 'prose prose-neutral max-w-none focus:outline-none min-h-[60vh] px-8 py-6',
@@ -53,6 +55,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
     },
     onUpdate({ editor }) {
       onChange?.(htmlToMarkdown(editor.getHTML()))
+    },
+    onCreate() {
+      onReady?.()
     },
   })
 

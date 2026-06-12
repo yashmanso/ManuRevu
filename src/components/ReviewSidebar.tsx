@@ -1,26 +1,25 @@
 'use client'
 
-import { Badge } from '@/components/ui/badge'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import type { Suggestion, Annotation, SidePanelItem } from '@/lib/suggestion-types'
 
-// Skill color scheme for visual distinction
-const SKILL_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  'article-usage': { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700' },
-  'long-sentence': { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700' },
-  'verb-simplification': { bg: 'bg-cyan-50', border: 'border-cyan-200', text: 'text-cyan-700' },
-  'word-choice': { bg: 'bg-teal-50', border: 'border-teal-200', text: 'text-teal-700' },
-  'clarity-check': { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700' },
-  'structure-flow': { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700' },
-  'argument-consistency': { bg: 'bg-pink-50', border: 'border-pink-200', text: 'text-pink-700' },
-  'citation-claim': { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700' },
-  'convoluted-ambiguous': { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700' },
-  'repetition-detector': { bg: 'bg-lime-50', border: 'border-lime-200', text: 'text-lime-700' },
+const SKILL_COLORS: Record<string, { bg: string; border: string; accent: string; label: string }> = {
+  'article-usage':        { bg: 'bg-blue-50',   border: 'border-blue-200',   accent: 'bg-blue-500',   label: 'bg-blue-100 text-blue-700' },
+  'long-sentence':        { bg: 'bg-purple-50', border: 'border-purple-200', accent: 'bg-purple-500', label: 'bg-purple-100 text-purple-700' },
+  'verb-simplification':  { bg: 'bg-cyan-50',   border: 'border-cyan-200',   accent: 'bg-cyan-500',   label: 'bg-cyan-100 text-cyan-700' },
+  'word-choice':          { bg: 'bg-teal-50',   border: 'border-teal-200',   accent: 'bg-teal-500',   label: 'bg-teal-100 text-teal-700' },
+  'clarity-check':        { bg: 'bg-orange-50', border: 'border-orange-200', accent: 'bg-orange-500', label: 'bg-orange-100 text-orange-700' },
+  'structure-flow':       { bg: 'bg-red-50',    border: 'border-red-200',    accent: 'bg-red-500',    label: 'bg-red-100 text-red-700' },
+  'argument-consistency': { bg: 'bg-pink-50',   border: 'border-pink-200',   accent: 'bg-pink-500',   label: 'bg-pink-100 text-pink-700' },
+  'citation-claim':       { bg: 'bg-indigo-50', border: 'border-indigo-200', accent: 'bg-indigo-500', label: 'bg-indigo-100 text-indigo-700' },
+  'convoluted-ambiguous': { bg: 'bg-rose-50',   border: 'border-rose-200',   accent: 'bg-rose-500',   label: 'bg-rose-100 text-rose-700' },
+  'repetition-detector':  { bg: 'bg-lime-50',   border: 'border-lime-200',   accent: 'bg-lime-500',   label: 'bg-lime-100 text-lime-700' },
 }
 
-function getSkillColor(skillId: string) {
-  return SKILL_COLORS[skillId] ?? { bg: 'bg-neutral-50', border: 'border-neutral-200', text: 'text-neutral-700' }
+function getColor(skillId: string) {
+  return SKILL_COLORS[skillId] ?? { bg: 'bg-neutral-50', border: 'border-neutral-200', accent: 'bg-neutral-400', label: 'bg-neutral-100 text-neutral-600' }
 }
 
 interface ReviewSidebarProps {
@@ -30,40 +29,24 @@ interface ReviewSidebarProps {
   onJumpTo: (id: string) => void
 }
 
-function CostBadge({ cost, tokens, model, latency }: { cost: number; tokens: number; model: string; latency: number }) {
-  return (
-    <span className="text-xs text-neutral-400" title={`Model: ${model} · ${tokens} tokens · ${latency}ms`}>
-      ${cost.toFixed(4)}
-    </span>
-  )
-}
-
 function AnnotationCard({ item, onAccept, onReject, onJumpTo }: { item: Annotation } & Pick<ReviewSidebarProps, 'onAccept' | 'onReject' | 'onJumpTo'>) {
-  const colors = getSkillColor(item.skillId)
-  const bgClass = item.verdict === 'pending' ? colors.bg : 'bg-neutral-50'
-  const borderClass = item.verdict === 'pending' ? colors.border : 'border-neutral-200'
-  const textClass = item.verdict === 'pending' ? colors.text : 'text-neutral-500'
-
+  const resolved = item.verdict !== 'pending'
   return (
-    <div className={`p-3 rounded-md border text-sm ${borderClass} ${bgClass} ${item.verdict === 'pending' ? '' : 'opacity-60'}`}>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <Badge variant="secondary" className={`text-xs ${textClass} ${item.verdict === 'pending' ? colors.bg + ' ' + colors.border : ''}`}>
-          {item.skillId.replace(/-/g, ' ')}
-        </Badge>
-        <CostBadge cost={item.cost_usd} tokens={item.tokens} model={item.model} latency={item.latency_ms} />
+    <div className={`rounded-md border text-sm overflow-hidden ${resolved ? 'opacity-50' : ''} border-neutral-200 bg-white`}>
+      <div className="px-3 py-2.5">
+        <p className="text-neutral-800 text-sm leading-snug mb-1">{item.message}</p>
+        {item.text && (
+          <p className="text-neutral-400 text-xs italic line-clamp-2 mb-1.5">"{item.text}"</p>
+        )}
+        {item.suggestion && (
+          <p className="text-green-700 text-xs font-medium">→ {item.suggestion}</p>
+        )}
       </div>
-      <p className="text-neutral-800 mb-1">{item.message}</p>
-      {item.text && (
-        <blockquote className="border-l-2 border-amber-400 pl-2 text-neutral-500 italic text-xs mb-1 line-clamp-2">
-          &ldquo;{item.text}&rdquo;
-        </blockquote>
-      )}
-      {item.suggestion && <p className="text-green-700 text-xs mb-2">→ {item.suggestion}</p>}
-      {item.verdict === 'pending' && (
-        <div className="flex gap-2 mt-2">
-          <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => onJumpTo(item.id)}>Jump</Button>
-          <Button size="sm" className="h-6 text-xs bg-green-600 hover:bg-green-700" onClick={() => onAccept(item.id)}>Accept</Button>
-          <Button size="sm" variant="outline" className="h-6 text-xs text-red-600 border-red-200 hover:bg-red-50" onClick={() => onReject(item.id)}>Reject</Button>
+      {!resolved && (
+        <div className="flex gap-1.5 px-3 pb-2.5">
+          <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => onJumpTo(item.id)}>Jump</Button>
+          <Button size="sm" className="h-6 text-xs px-2 bg-green-600 hover:bg-green-700" onClick={() => onAccept(item.id)}>Accept</Button>
+          <Button size="sm" variant="outline" className="h-6 text-xs px-2 text-red-600 border-red-200 hover:bg-red-50" onClick={() => onReject(item.id)}>Reject</Button>
         </div>
       )}
     </div>
@@ -72,44 +55,70 @@ function AnnotationCard({ item, onAccept, onReject, onJumpTo }: { item: Annotati
 
 function SidePanelCard({ item, onAccept, onReject }: { item: SidePanelItem } & Pick<ReviewSidebarProps, 'onAccept' | 'onReject'>) {
   const content = item.content as Record<string, unknown>
-  const colors = getSkillColor(item.skillId)
-  const bgClass = item.verdict === 'pending' ? colors.bg : 'bg-neutral-50'
-  const borderClass = item.verdict === 'pending' ? colors.border : 'border-neutral-200'
-  const textClass = item.verdict === 'pending' ? colors.text : 'text-neutral-500'
-
+  const resolved = item.verdict !== 'pending'
   return (
-    <div className={`p-3 rounded-md border text-sm ${borderClass} ${bgClass} ${item.verdict === 'pending' ? '' : 'opacity-60'}`}>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <Badge variant="secondary" className={`text-xs ${textClass} ${item.verdict === 'pending' ? colors.bg + ' ' + colors.border : ''}`}>
-          {item.skillId.replace(/-/g, ' ')}
-        </Badge>
-        <CostBadge cost={item.cost_usd} tokens={item.tokens} model={item.model} latency={item.latency_ms} />
-      </div>
-      {!!content.overall_assessment && (
-        <p className="text-neutral-700 mb-2 text-xs">{String(content.overall_assessment)}</p>
-      )}
-      {!!content.summary && (
-        <p className="text-neutral-700 mb-2 text-xs">{String(content.summary)}</p>
-      )}
-      {Array.isArray(content.issues) && content.issues.slice(0, 3).map((issue: Record<string, unknown>, i: number) => {
-        const borderColor = colors.border.replace('border-', 'border-l-2 border-').replace('-200', '-300')
-        return (
-          <div key={i} className={`mb-1 pl-2 border-l-2 ${borderColor}`}>
-            <p className="text-xs text-neutral-600 font-medium">{String(issue.location ?? issue.section ?? '')}</p>
+    <div className={`rounded-md border text-sm overflow-hidden ${resolved ? 'opacity-50' : ''} border-neutral-200 bg-white`}>
+      <div className="px-3 py-2.5 space-y-1.5">
+        {!!content.overall_assessment && <p className="text-neutral-700 text-xs">{String(content.overall_assessment)}</p>}
+        {!!content.summary && <p className="text-neutral-700 text-xs">{String(content.summary)}</p>}
+        {Array.isArray(content.issues) && content.issues.slice(0, 3).map((issue: Record<string, unknown>, i: number) => (
+          <div key={i} className="pl-2 border-l-2 border-neutral-300">
+            <p className="text-xs text-neutral-500 font-medium">{String(issue.location ?? issue.section ?? '')}</p>
             <p className="text-xs text-neutral-700">{String(issue.issue ?? issue.suggestion ?? '')}</p>
           </div>
-        )
-      })}
-      {Array.isArray(content.conflicts) && content.conflicts.slice(0, 3).map((c: Record<string, unknown>, i: number) => (
-        <div key={i} className="mb-1 pl-2 border-l-2 border-red-300">
-          <p className="text-xs text-red-700 font-medium">{String(c.severity ?? '')} conflict</p>
-          <p className="text-xs text-neutral-600">{String(c.explanation ?? '')}</p>
+        ))}
+        {Array.isArray(content.conflicts) && content.conflicts.slice(0, 3).map((c: Record<string, unknown>, i: number) => (
+          <div key={i} className="pl-2 border-l-2 border-red-300">
+            <p className="text-xs text-red-600 font-medium">{String(c.severity ?? '')} conflict</p>
+            <p className="text-xs text-neutral-600">{String(c.explanation ?? '')}</p>
+          </div>
+        ))}
+      </div>
+      {!resolved && (
+        <div className="flex gap-1.5 px-3 pb-2.5">
+          <Button size="sm" className="h-6 text-xs px-2 bg-green-600 hover:bg-green-700" onClick={() => onAccept(item.id)}>Dismiss ✓</Button>
+          <Button size="sm" variant="outline" className="h-6 text-xs px-2 text-red-600 border-red-200 hover:bg-red-50" onClick={() => onReject(item.id)}>Dismiss ✗</Button>
         </div>
-      ))}
-      {item.verdict === 'pending' && (
-        <div className="flex gap-2 mt-2">
-          <Button size="sm" className="h-6 text-xs bg-green-600 hover:bg-green-700" onClick={() => onAccept(item.id)}>Dismiss ✓</Button>
-          <Button size="sm" variant="outline" className="h-6 text-xs text-red-600 border-red-200 hover:bg-red-50" onClick={() => onReject(item.id)}>Dismiss ✗</Button>
+      )}
+    </div>
+  )
+}
+
+function SkillGroup({ skillId, items, defaultOpen = true, onAccept, onReject, onJumpTo }: {
+  skillId: string
+  items: Suggestion[]
+  defaultOpen?: boolean
+} & Pick<ReviewSidebarProps, 'onAccept' | 'onReject' | 'onJumpTo'>) {
+  const [open, setOpen] = useState(defaultOpen)
+  const colors = getColor(skillId)
+  const pending = items.filter(s => s.verdict === 'pending').length
+  const label = skillId.replace(/-/g, ' ')
+
+  return (
+    <div className={`rounded-lg border overflow-hidden ${colors.border}`}>
+      <button
+        className={`w-full flex items-center justify-between px-3 py-2 ${colors.bg} hover:brightness-95 transition-all`}
+        onClick={() => setOpen(o => !o)}
+      >
+        <div className="flex items-center gap-2">
+          <span className={`inline-block w-2 h-2 rounded-full ${colors.accent}`} />
+          <span className={`text-xs font-semibold capitalize ${colors.label.split(' ')[1]}`}>{label}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {pending > 0 && (
+            <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${colors.label}`}>{pending}</span>
+          )}
+          <span className="text-neutral-400 text-xs">{open ? '▲' : '▼'}</span>
+        </div>
+      </button>
+      {open && (
+        <div className="flex flex-col gap-1.5 p-2 bg-white">
+          {items.map(s => s.type === 'annotation'
+            ? <AnnotationCard key={s.id} item={s} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
+            : s.type === 'sidepanel'
+            ? <SidePanelCard key={s.id} item={s} onAccept={onAccept} onReject={onReject} />
+            : null
+          )}
         </div>
       )}
     </div>
@@ -117,18 +126,17 @@ function SidePanelCard({ item, onAccept, onReject }: { item: SidePanelItem } & P
 }
 
 export default function ReviewSidebar({ suggestions, onAccept, onReject, onJumpTo }: ReviewSidebarProps) {
-  const pending = suggestions.filter(s => s.verdict === 'pending')
-  const done = suggestions.filter(s => s.verdict !== 'pending')
-
   if (suggestions.length === 0) {
     return (
-      <div className="p-4 text-sm text-neutral-400 text-center mt-8">
-        Run a skill with / to see suggestions here.
+      <div className="p-6 text-sm text-neutral-400 text-center mt-8 leading-relaxed">
+        Run a skill with <kbd className="px-1 py-0.5 bg-neutral-100 rounded text-xs font-mono">/</kbd> to see suggestions here.
       </div>
     )
   }
 
-  // Group by skill
+  const pending = suggestions.filter(s => s.verdict === 'pending')
+  const done = suggestions.filter(s => s.verdict !== 'pending')
+
   const groupBySkill = (items: Suggestion[]) => {
     const groups = new Map<string, Suggestion[]>()
     items.forEach(item => {
@@ -138,39 +146,26 @@ export default function ReviewSidebar({ suggestions, onAccept, onReject, onJumpT
     return groups
   }
 
-  const pendingBySkill = groupBySkill(pending)
-  const doneBySkill = groupBySkill(done)
-
   return (
-    <div className="flex flex-col gap-3 p-3">
+    <div className="flex flex-col gap-2 p-3">
       {pending.length > 0 && (
         <>
-          <p className="text-xs font-medium text-neutral-500 uppercase tracking-wide">Pending ({pending.length})</p>
-          {Array.from(pendingBySkill.entries()).map(([skillId, items]) => (
-            <div key={skillId} className="space-y-2">
-              {items.map(s => s.type === 'annotation'
-                ? <AnnotationCard key={s.id} item={s} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
-                : s.type === 'sidepanel'
-                ? <SidePanelCard key={s.id} item={s} onAccept={onAccept} onReject={onReject} />
-                : null
-              )}
-            </div>
+          <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider px-1">
+            Pending <span className="font-normal text-neutral-400">({pending.length})</span>
+          </p>
+          {Array.from(groupBySkill(pending).entries()).map(([skillId, items]) => (
+            <SkillGroup key={skillId} skillId={skillId} items={items} defaultOpen onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
           ))}
         </>
       )}
+      {done.length > 0 && pending.length > 0 && <Separator className="my-1" />}
       {done.length > 0 && (
         <>
-          <Separator />
-          <p className="text-xs font-medium text-neutral-400 uppercase tracking-wide">Resolved ({done.length})</p>
-          {Array.from(doneBySkill.entries()).map(([skillId, items]) => (
-            <div key={skillId} className="space-y-2">
-              {items.map(s => s.type === 'annotation'
-                ? <AnnotationCard key={s.id} item={s} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
-                : s.type === 'sidepanel'
-                ? <SidePanelCard key={s.id} item={s} onAccept={onAccept} onReject={onReject} />
-                : null
-              )}
-            </div>
+          <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider px-1">
+            Resolved <span className="font-normal">({done.length})</span>
+          </p>
+          {Array.from(groupBySkill(done).entries()).map(([skillId, items]) => (
+            <SkillGroup key={skillId} skillId={skillId} items={items} defaultOpen={false} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
           ))}
         </>
       )}

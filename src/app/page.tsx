@@ -98,8 +98,8 @@ export default function Home() {
     }).catch(console.error)
   }, [])
 
-  // Load saved manuscript on mount
-  useEffect(() => {
+  // Load saved manuscript once editor is ready
+  const handleEditorReady = useCallback(() => {
     fetch(`/api/manuscript?id=${MANUSCRIPT_ID}`)
       .then(r => r.ok ? r.json() : null)
       .then((data: { content?: string } | null) => {
@@ -502,7 +502,7 @@ export default function Home() {
         )}
         {/* Editor */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          <Editor ref={editorRef} onChange={handleEditorChange} />
+          <Editor ref={editorRef} onChange={handleEditorChange} onReady={handleEditorReady} />
         </div>
       </div>
 
