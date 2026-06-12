@@ -67,6 +67,14 @@ export function runWordChoiceLocal(text: string): WordChoiceIssue[] {
   const issues: WordChoiceIssue[] = []
   const seen = new Set<string>()
 
+  // Helper: extract full sentence from position
+  function getFullSentence(fullText: string, matchIndex: number, matchLength: number): string {
+    const start = Math.max(0, fullText.lastIndexOf('.', matchIndex) + 1)
+    const end = Math.min(fullText.length, fullText.indexOf('.', matchIndex + matchLength) + 1)
+    const sentence = fullText.slice(start, end).replace(/\s+/g, ' ').trim()
+    return sentence || fullText.slice(Math.max(0, matchIndex - 100), Math.min(fullText.length, matchIndex + matchLength + 100)).replace(/\s+/g, ' ').trim()
+  }
+
   for (const entry of WORD_MAP) {
     entry.pattern.lastIndex = 0
     const matches = [...text.matchAll(entry.pattern)]
@@ -75,9 +83,7 @@ export function runWordChoiceLocal(text: string): WordChoiceIssue[] {
       const key = `${found.toLowerCase()}-${match.index}`
       if (seen.has(key)) continue
       seen.add(key)
-      const start = Math.max(0, (match.index ?? 0) - 50)
-      const end = Math.min(text.length, (match.index ?? 0) + found.length + 50)
-      const context = text.slice(start, end).replace(/\s+/g, ' ').trim()
+      const context = getFullSentence(text, match.index ?? 0, found.length)
       issues.push({ text: context, verdict: entry.verdict, explanation: entry.explanation, suggestion: entry.suggestion })
     }
   }

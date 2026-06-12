@@ -29,15 +29,20 @@ function getArticleForWord(word: string): 'a' | 'an' {
 export function runArticleUsageLocal(text: string): ArticleIssue[] {
   const issues: ArticleIssue[] = []
 
+  // Helper: extract full sentence from position
+  function getFullSentence(fullText: string, matchIndex: number, matchLength: number): string {
+    const start = Math.max(0, fullText.lastIndexOf('.', matchIndex) + 1)
+    const end = Math.min(fullText.length, fullText.indexOf('.', matchIndex + matchLength) + 1)
+    return fullText.slice(start, end).replace(/\s+/g, ' ').trim()
+  }
+
   // Rule 1: "a" before a vowel sound → should be "an"
   const aBeforeVowel = /\ba\s+([aeiou][a-zA-Z-]+)/g
   for (const match of text.matchAll(aBeforeVowel)) {
     const nextWord = match[1]
     if (A_NOT_AN.has(nextWord.toLowerCase())) continue
-    const start = Math.max(0, (match.index ?? 0) - 30)
-    const end = Math.min(text.length, (match.index ?? 0) + match[0].length + 30)
     issues.push({
-      text: text.slice(start, end).replace(/\s+/g, ' ').trim(),
+      text: getFullSentence(text, match.index ?? 0, match[0].length),
       type: 'wrong_form',
       suggestion: `"an ${nextWord}"`,
       explanation: `"A" before a vowel sound should be "an".`,
@@ -51,10 +56,8 @@ export function runArticleUsageLocal(text: string): ArticleIssue[] {
     if (AN_NOT_A.has(nextWord.toLowerCase())) continue
     // Skip if it's an abbreviation that sounds like a vowel (e.g., "an MBA")
     if (/^[A-Z]{2,}$/.test(nextWord)) continue
-    const start = Math.max(0, (match.index ?? 0) - 30)
-    const end = Math.min(text.length, (match.index ?? 0) + match[0].length + 30)
     issues.push({
-      text: text.slice(start, end).replace(/\s+/g, ' ').trim(),
+      text: getFullSentence(text, match.index ?? 0, match[0].length),
       type: 'wrong_form',
       suggestion: `"a ${nextWord}"`,
       explanation: `"An" before a consonant sound should be "a".`,
@@ -64,10 +67,8 @@ export function runArticleUsageLocal(text: string): ArticleIssue[] {
   // Rule 3: "the following" — "following" almost always needs "the"
   const followingWithout = /\b(?<!the\s)following\s+(?:figure|table|section|chapter|example|equation)\b/gi
   for (const match of text.matchAll(followingWithout)) {
-    const start = Math.max(0, (match.index ?? 0) - 20)
-    const end = Math.min(text.length, (match.index ?? 0) + match[0].length + 20)
     issues.push({
-      text: text.slice(start, end).replace(/\s+/g, ' ').trim(),
+      text: getFullSentence(text, match.index ?? 0, match[0].length),
       type: 'missing',
       suggestion: `"the ${match[0]}"`,
       explanation: '"The" is typically required before "following [noun]".',
