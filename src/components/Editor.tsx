@@ -78,42 +78,24 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       editor.commands.deleteRange({ from: Math.max(0, from - charCount), to: from })
     },
     findAndSelect: (searchText: string) => {
-      if (!editor) {
-        console.log('[Jump] No editor')
-        return false
-      }
+      if (!editor) return false
 
       const fullText = editor.state.doc.textContent
-      console.log('[Jump] Searching for:', JSON.stringify(searchText.substring(0, 50)))
 
-      // Try progressively shorter chunks (the text might be truncated)
+      // Try progressively shorter chunks
       for (let len = searchText.length; len >= 20; len -= 10) {
         const chunk = searchText.substring(0, len).trim()
         const index = fullText.indexOf(chunk)
         if (index !== -1) {
-          console.log('[Jump] Found match (length', len, ') at index:', index)
-          // Select from this position and extend ~200 chars for context
-          const endPos = Math.min(index + 200, fullText.length)
+          const endPos = Math.min(index + chunk.length, fullText.length)
           const selection = TextSelection.create(editor.state.doc, index, endPos)
-          const tr = editor.state.tr.setSelection(selection)
-          editor.view.dispatch(tr.scrollIntoView())
+          const tr = editor.state.tr.setSelection(selection).scrollIntoView()
+          editor.view.dispatch(tr)
+          editor.view.focus()
           return true
         }
       }
 
-      // Last resort: search for any 30-char substring
-      const lastTry = searchText.substring(0, 30).trim()
-      const lastIndex = fullText.indexOf(lastTry)
-      if (lastIndex !== -1) {
-        console.log('[Jump] Found with 30-char fallback at:', lastIndex)
-        const endPos = Math.min(lastIndex + 200, fullText.length)
-        const selection = TextSelection.create(editor.state.doc, lastIndex, endPos)
-        const tr = editor.state.tr.setSelection(selection)
-        editor.view.dispatch(tr.scrollIntoView())
-        return true
-      }
-
-      console.log('[Jump] No match found even with progressive fallback')
       return false
     },
   }))
