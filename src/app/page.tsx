@@ -40,6 +40,19 @@ const MANUSCRIPT_ID = 'current'
 // Skills that always run locally regardless of server flag
 const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-choice', 'article-usage'])
 
+// Inline highlight colors per skill (kept in sync with ReviewSidebar accents).
+const SKILL_HIGHLIGHT: Record<string, string> = {
+  'article-usage': 'rgba(59,130,246,0.18)',
+  'long-sentence': 'rgba(168,85,247,0.18)',
+  'verb-simplification': 'rgba(6,182,212,0.18)',
+  'word-choice': 'rgba(20,184,166,0.18)',
+  'clarity-check': 'rgba(249,115,22,0.18)',
+  'structure-flow': 'rgba(239,68,68,0.18)',
+}
+function highlightColor(skillId: string): string {
+  return SKILL_HIGHLIGHT[skillId] ?? 'rgba(245,158,11,0.18)'
+}
+
 let idCounter = 0
 function genId(): string {
   idCounter++
@@ -60,6 +73,7 @@ export default function Home() {
 
   const [skills, setSkills] = useState<Skill[]>([])
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
+  const [activeSuggestionId, setActiveSuggestionId] = useState<string | null>(null)
   const [runStatus, setRunStatus] = useState<RunStatus>('idle')
   const [activeRunLabel, setActiveRunLabel] = useState('')
   const [slashMenu, setSlashMenu] = useState<{ open: boolean; position: { top: number; left: number }; query: string }>({
@@ -147,6 +161,20 @@ export default function Home() {
     document.addEventListener('selectionchange', checkSelection)
     return () => document.removeEventListener('selectionchange', checkSelection)
   }, [])
+
+  // Push inline highlight decorations for every pending annotation so the
+  // flags live in the text and move with it as the user scrolls/edits.
+  useEffect(() => {
+    const spans = suggestions
+      .filter((s): s is Annotation => s.type === 'annotation' && s.verdict === 'pending' && !!s.match)
+      .map(s => ({
+        id: s.id,
+        match: s.match as string,
+        color: highlightColor(s.skillId),
+        active: s.id === activeSuggestionId,
+      }))
+    editorRef.current?.setHighlights(spans)
+  }, [suggestions, activeSuggestionId])
 
   // Editor change → debounced stats/sections refresh (1s) + debounced auto-save (2s)
   const handleEditorChange = useCallback((md: string) => {
@@ -269,14 +297,18 @@ export default function Home() {
         let parsed: { issues?: Array<{ text?: string; sentence?: string; message?: string; reason?: string; suggestion?: string; explanation?: string }> }
         try { parsed = JSON.parse(result) } catch { parsed = {} }
         const issues = parsed.issues ?? []
-        const newItems: Annotation[] = issues.map((issue) => ({
-          ...baseAttrs,
-          id: genId(),
-          type: 'annotation' as const,
-          text: issue.sentence ?? issue.text ?? '',
-          message: issue.reason ?? issue.explanation ?? issue.message ?? '',
-          suggestion: issue.suggestion,
-        }))
+        const newItems: Annotation[] = issues.map((issue) => {
+          const flagged = issue.sentence ?? issue.text ?? ''
+          return {
+            ...baseAttrs,
+            id: genId(),
+            type: 'annotation' as const,
+            text: flagged,
+            match: flagged, // best-effort exact locate; no auto-apply for LLM annotations
+            message: issue.reason ?? issue.explanation ?? issue.message ?? '',
+            suggestion: issue.suggestion,
+          }
+        })
         setSuggestions(prev => [...prev, ...newItems])
         if (newItems.length === 0) {
           toast.success(`${skill.name}: no issues found`, { description: costNote })
@@ -319,9 +351,12 @@ export default function Home() {
       return
     }
 
-    // Run local skills without any API call
+    // Run local skills without any API call.
+    // Local skills operate on the editor's exact plain text so every `match`
+    // is a verbatim substring — this is what makes Jump and Accept exact.
     if (skill.local || LOCAL_SKILL_IDS.has(skill.id)) {
-      const localResult = runLocalSkill(skill.id, manuscript, editorRef.current?.getSelectedText() || undefined)
+      const plainText = editorRef.current?.getPlainText() ?? ''
+      const localResult = runLocalSkill(skill.id, plainText, longSentenceThreshold)
       if (localResult) {
         const newItems: Annotation[] = localResult.issues.map((issue) => ({
           id: genId(),
@@ -333,8 +368,10 @@ export default function Home() {
           verdict: 'pending' as const,
           created_at: new Date().toISOString(),
           type: 'annotation' as const,
-          text: issue.sentence ?? issue.text ?? '',
-          message: issue.reason ?? issue.explanation ?? '',
+          text: issue.text,
+          match: issue.match,
+          replacement: issue.replacement,
+          message: issue.message,
           suggestion: issue.suggestion,
         }))
         setSuggestions(prev => [...prev, ...newItems])
@@ -376,16 +413,28 @@ export default function Home() {
     }
 
     await executeRun(skill, manuscript, selection)
-  }, [slashMenu.query, apiEnabled, previewPrompt, scopedManuscript, executeRun, selectedSectionIds])
+  }, [slashMenu.query, apiEnabled, previewPrompt, scopedManuscript, executeRun, selectedSectionIds, longSentenceThreshold])
 
   const handleAccept = useCallback(async (id: string) => {
+    const suggestion = suggestions.find(s => s.id === id)
+    // Apply the concrete text change when the annotation carries one.
+    if (suggestion?.type === 'annotation' && suggestion.match && suggestion.replacement !== undefined) {
+      const applied = editorRef.current?.replaceText(suggestion.match, suggestion.replacement)
+      if (!applied) {
+        toast.error('Could not locate the text to change', {
+          description: 'It may have already been edited. Marking as resolved.',
+        })
+      } else {
+        toast.success('Change applied')
+      }
+    }
     setSuggestions(prev => prev.map(s => s.id === id ? { ...s, verdict: 'accepted' as const } : s))
     await fetch('/api/session/log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'decision', run_id: id, decision: 'accepted' }),
     })
-  }, [])
+  }, [suggestions])
 
   const handleReject = useCallback(async (id: string) => {
     setSuggestions(prev => prev.map(s => s.id === id ? { ...s, verdict: 'rejected' as const } : s))
@@ -398,9 +447,19 @@ export default function Home() {
 
   const handleJumpTo = useCallback((id: string) => {
     const suggestion = suggestions.find(s => s.id === id) as Annotation | undefined
-    if (!suggestion || suggestion.type !== 'annotation' || !suggestion.text) return
-    editorRef.current?.findAndSelect(suggestion.text)
+    if (!suggestion || suggestion.type !== 'annotation') return
+    setActiveSuggestionId(id)
+    // Prefer the exact verbatim `match`; fall back to display text.
+    const target = suggestion.match ?? suggestion.text
+    if (target) editorRef.current?.selectText(target)
   }, [suggestions])
+
+  // Map a suggestion clicked inside the editor back to its card.
+  const handleHighlightClick = useCallback((id: string) => {
+    setActiveSuggestionId(id)
+    const card = document.querySelector(`[data-suggestion-card="${id}"]`)
+    card?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [])
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -486,7 +545,7 @@ export default function Home() {
         )}
         {/* Editor */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          <Editor ref={editorRef} onChange={handleEditorChange} onReady={handleEditorReady} />
+          <Editor ref={editorRef} onChange={handleEditorChange} onReady={handleEditorReady} onHighlightClick={handleHighlightClick} />
         </div>
       </div>
 
@@ -500,6 +559,7 @@ export default function Home() {
         </div>
         <ReviewSidebar
           suggestions={suggestions}
+          activeId={activeSuggestionId}
           onAccept={handleAccept}
           onReject={handleReject}
           onJumpTo={handleJumpTo}

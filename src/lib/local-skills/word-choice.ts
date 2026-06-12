@@ -1,90 +1,74 @@
-export interface WordChoiceIssue {
-  text: string
-  verdict: 'swap' | 'keep' | 'rephrase'
-  explanation: string
-  suggestion: string
-}
+import { type LocalIssue, fullSentence } from './types'
 
 interface WordEntry {
   pattern: RegExp
-  verdict: 'swap' | 'rephrase'
+  // When a concrete swap exists, compute it; otherwise return undefined and
+  // the issue is advisory only (Accept just dismisses, no text change).
+  replace?: (matched: string) => string
   explanation: string
   suggestion: string
 }
 
 const WORD_MAP: WordEntry[] = [
   {
-    pattern: /\bimpact(?:ed|s|ing)?\b(?=\s+(?:on|upon|the)\b)/g,
-    verdict: 'rephrase',
-    explanation: '"Impact on" is overused. Consider "effect on", "influence on", or "consequence for".',
-    suggestion: 'effect / influence / consequence',
+    pattern: /\bcomprises?(\s+)of\b/gi,
+    replace: (m) => m.replace(/(\s+)of\b/i, ''),
+    explanation: '"Comprise of" is incorrect — "comprise" already means "consist of".',
+    suggestion: 'drop "of"',
   },
   {
-    pattern: /\bsignificant(?:ly)?\b(?!\s+(?:difference|effect|result|correlation|relationship|association|p\s*[<=]))/g,
-    verdict: 'rephrase',
-    explanation: '"Significant" implies statistical significance — use "substantial", "notable", or "considerable" for non-statistical importance.',
-    suggestion: 'substantial / notable / considerable',
-  },
-  {
-    pattern: /\bcomprises?\s+of\b/g,
-    verdict: 'swap',
-    explanation: '"Comprise of" is incorrect. "Comprise" means "consist of" — no "of" needed.',
-    suggestion: 'comprises (drop "of")',
-  },
-  {
-    pattern: /\butilize[sd]?\b|\butilizing\b/g,
-    verdict: 'swap',
+    pattern: /\butiliz(e|es|ed|ing)\b/gi,
+    replace: (m) => ({ e: 'use', es: 'uses', ed: 'used', ing: 'using' } as Record<string, string>)[m.slice(7).toLowerCase()] ?? 'use',
     explanation: '"Utilize" rarely adds meaning over "use".',
     suggestion: 'use',
   },
   {
-    pattern: /\bleverage[sd]?\b|\bleveraging\b(?=\s+\w)/g,
-    verdict: 'swap',
-    explanation: '"Leverage" as a verb is business jargon. Use "use", "draw on", or "apply".',
-    suggestion: 'use / draw on',
+    pattern: /\bimpact(ed|s|ing)?\b(?=\s+(?:on|upon))/gi,
+    explanation: '"Impact on" is overused. Consider "effect on", "influence on", or "consequence for".',
+    suggestion: 'effect / influence / consequence',
   },
   {
-    pattern: /\bparadigm\s+shift\b/gi,
-    verdict: 'rephrase',
+    pattern: /\bsignificant(ly)?\b(?!\s+(?:difference|effect|result|correlation|relationship|association|p\s*[<=]))/gi,
+    explanation: '"Significant" implies statistical significance — use "substantial" or "notable" for general importance.',
+    suggestion: 'substantial / notable',
+  },
+  {
+    pattern: /\bparadigm(\s+)shift\b/gi,
     explanation: '"Paradigm shift" is overused. Be specific about what changed.',
-    suggestion: 'Describe the specific change',
+    suggestion: 'describe the specific change',
   },
   {
-    pattern: /\bsynerg(?:y|ies|istic)\b/gi,
-    verdict: 'rephrase',
+    pattern: /\bsynerg(y|ies|istic)\b/gi,
     explanation: '"Synergy" is vague. Specify the combined effect.',
     suggestion: 'combined effect / mutual reinforcement',
   },
-  {
-    pattern: /\brobust\b(?=\s+(?:evidence|findings|results|analysis|framework|approach))/g,
-    verdict: 'rephrase',
-    explanation: '"Robust" is overused in academic writing. Specify what makes it robust.',
-    suggestion: 'reliable / strong / rigorous',
-  },
 ]
 
-export function runWordChoiceLocal(text: string): WordChoiceIssue[] {
-  const issues: WordChoiceIssue[] = []
+export function runWordChoiceLocal(text: string): LocalIssue[] {
+  const issues: LocalIssue[] = []
   const seen = new Set<string>()
-
-  // Helper: extract full sentence from position
-  function getFullSentence(fullText: string, matchIndex: number, matchLength: number): string {
-    const start = Math.max(0, fullText.lastIndexOf('.', matchIndex) + 1)
-    const end = Math.min(fullText.length, fullText.indexOf('.', matchIndex + matchLength) + 1)
-    const sentence = fullText.slice(start, end).replace(/\s+/g, ' ').trim()
-    return sentence || fullText.slice(Math.max(0, matchIndex - 100), Math.min(fullText.length, matchIndex + matchLength + 100)).replace(/\s+/g, ' ').trim()
-  }
 
   for (const entry of WORD_MAP) {
     entry.pattern.lastIndex = 0
-    const matches = [...text.matchAll(entry.pattern)]
-    for (const match of matches) {
+    for (const match of text.matchAll(entry.pattern)) {
       const found = match[0]
       const key = `${found.toLowerCase()}-${match.index}`
       if (seen.has(key)) continue
       seen.add(key)
-      const context = getFullSentence(text, match.index ?? 0, found.length)
-      issues.push({ text: context, verdict: entry.verdict, explanation: entry.explanation, suggestion: entry.suggestion })
+      let replacement: string | undefined
+      if (entry.replace) {
+        replacement = entry.replace(found)
+        if (found[0] === found[0].toUpperCase()) {
+          replacement = replacement[0].toUpperCase() + replacement.slice(1)
+        }
+      }
+      issues.push({
+        text: fullSentence(text, match.index ?? 0, found.length),
+        match: found,
+        replacement,
+        message: entry.explanation,
+        suggestion: replacement ? `${found} → ${replacement}` : entry.suggestion,
+      })
     }
   }
 

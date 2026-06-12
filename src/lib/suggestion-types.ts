@@ -19,7 +19,9 @@ export interface Annotation {
   type: 'annotation'
   id: string
   skillId: string
-  text: string          // the flagged text span
+  text: string          // the flagged text span (for display)
+  match?: string        // exact verbatim substring of the editor plain text (for locate/replace)
+  replacement?: string  // concrete replacement to apply on Accept, if any
   message: string
   severity?: 'high' | 'medium' | 'low'
   suggestion?: string

@@ -2,60 +2,29 @@ import { runLongSentenceLocal } from './long-sentence'
 import { runVerbSimplificationLocal } from './verb-simplification'
 import { runWordChoiceLocal } from './word-choice'
 import { runArticleUsageLocal } from './article-usage'
+import { type LocalIssue } from './types'
+
+export type { LocalIssue } from './types'
 
 export interface LocalSkillResult {
-  issues: Array<{
-    text: string
-    sentence?: string
-    word_count?: number
-    reason?: string
-    explanation?: string
-    suggestion?: string
-    verdict?: string
-    type?: string
-  }>
+  issues: LocalIssue[]
 }
 
-export function runLocalSkill(skillId: string, manuscript: string, selection?: string): LocalSkillResult | null {
-  const text = selection ?? manuscript
-
+/**
+ * Run a local (no-LLM) skill. `plainText` MUST be the exact string returned by
+ * Editor.getPlainText() so every issue's `match` is a verbatim substring,
+ * making Jump and Accept exact.
+ */
+export function runLocalSkill(skillId: string, plainText: string, threshold = 35): LocalSkillResult | null {
   switch (skillId) {
     case 'long-sentence':
-      return {
-        issues: runLongSentenceLocal(text).map(i => ({
-          text: i.sentence,
-          sentence: i.sentence,
-          word_count: i.word_count,
-          reason: i.reason,
-          suggestion: i.suggestion,
-        })),
-      }
+      return { issues: runLongSentenceLocal(plainText, threshold) }
     case 'verb-simplification':
-      return {
-        issues: runVerbSimplificationLocal(text).map(i => ({
-          text: i.text,
-          explanation: i.explanation,
-          suggestion: i.suggestion,
-        })),
-      }
+      return { issues: runVerbSimplificationLocal(plainText) }
     case 'word-choice':
-      return {
-        issues: runWordChoiceLocal(text).map(i => ({
-          text: i.text,
-          verdict: i.verdict,
-          explanation: i.explanation,
-          suggestion: i.suggestion,
-        })),
-      }
+      return { issues: runWordChoiceLocal(plainText) }
     case 'article-usage':
-      return {
-        issues: runArticleUsageLocal(text).map(i => ({
-          text: i.text,
-          type: i.type,
-          explanation: i.explanation,
-          suggestion: i.suggestion,
-        })),
-      }
+      return { issues: runArticleUsageLocal(plainText) }
     default:
       return null
   }

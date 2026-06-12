@@ -24,29 +24,50 @@ function getColor(skillId: string) {
 
 interface ReviewSidebarProps {
   suggestions: Suggestion[]
+  activeId?: string | null
   onAccept: (id: string) => void
   onReject: (id: string) => void
   onJumpTo: (id: string) => void
 }
 
-function AnnotationCard({ item, onAccept, onReject, onJumpTo }: { item: Annotation } & Pick<ReviewSidebarProps, 'onAccept' | 'onReject' | 'onJumpTo'>) {
+function AnnotationCard({ item, active, onAccept, onReject, onJumpTo }: { item: Annotation; active?: boolean } & Pick<ReviewSidebarProps, 'onAccept' | 'onReject' | 'onJumpTo'>) {
   const resolved = item.verdict !== 'pending'
+  const canApply = !!item.match && item.replacement !== undefined
   return (
-    <div className={`rounded-md border text-sm overflow-hidden ${resolved ? 'opacity-50' : ''} border-neutral-200 bg-white`}>
+    <div
+      data-suggestion-card={item.id}
+      onClick={() => !resolved && onJumpTo(item.id)}
+      className={`rounded-md border text-sm overflow-hidden cursor-pointer transition-shadow ${resolved ? 'opacity-50' : ''} ${active ? 'border-neutral-800 shadow-md' : 'border-neutral-200'} bg-white`}
+    >
       <div className="px-3 py-2.5">
-        <p className="text-neutral-800 text-sm leading-snug mb-1">{item.message}</p>
-        {item.text && (
-          <p className="text-neutral-500 text-xs italic mb-1.5 leading-relaxed break-words">"{item.text}"</p>
-        )}
-        {item.suggestion && (
-          <p className="text-green-700 text-xs font-medium leading-relaxed">→ {item.suggestion}</p>
+        <p className="text-neutral-800 text-sm leading-snug mb-1.5">{item.message}</p>
+        {/* Track-changes style before → after when a concrete fix exists */}
+        {canApply ? (
+          <p className="text-xs leading-relaxed break-words mb-1">
+            <span className="text-red-600 line-through decoration-red-400">{item.match}</span>
+            {' '}
+            <span className="text-green-700 font-medium">{item.replacement}</span>
+          </p>
+        ) : (
+          <>
+            {item.text && (
+              <p className="text-neutral-500 text-xs italic mb-1 leading-relaxed break-words">&ldquo;{item.text}&rdquo;</p>
+            )}
+            {item.suggestion && (
+              <p className="text-green-700 text-xs font-medium leading-relaxed">→ {item.suggestion}</p>
+            )}
+          </>
         )}
       </div>
       {!resolved && (
-        <div className="flex gap-1.5 px-3 pb-2.5">
+        <div className="flex gap-1.5 px-3 pb-2.5" onClick={e => e.stopPropagation()}>
           <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => onJumpTo(item.id)}>Jump</Button>
-          <Button size="sm" className="h-6 text-xs px-2 bg-green-600 hover:bg-green-700" onClick={() => onAccept(item.id)}>Accept</Button>
-          <Button size="sm" variant="outline" className="h-6 text-xs px-2 text-red-600 border-red-200 hover:bg-red-50" onClick={() => onReject(item.id)}>Reject</Button>
+          <Button size="sm" className="h-6 text-xs px-2 bg-green-600 hover:bg-green-700" onClick={() => onAccept(item.id)}>
+            {canApply ? 'Accept' : 'Done'}
+          </Button>
+          <Button size="sm" variant="outline" className="h-6 text-xs px-2 text-red-600 border-red-200 hover:bg-red-50" onClick={() => onReject(item.id)}>
+            {canApply ? 'Reject' : 'Dismiss'}
+          </Button>
         </div>
       )}
     </div>
@@ -84,11 +105,11 @@ function SidePanelCard({ item, onAccept, onReject }: { item: SidePanelItem } & P
   )
 }
 
-function SkillGroup({ skillId, items, defaultOpen = true, onAccept, onReject, onJumpTo }: {
+function SkillGroup({ skillId, items, defaultOpen = true, activeId, onAccept, onReject, onJumpTo }: {
   skillId: string
   items: Suggestion[]
   defaultOpen?: boolean
-} & Pick<ReviewSidebarProps, 'onAccept' | 'onReject' | 'onJumpTo'>) {
+} & Pick<ReviewSidebarProps, 'activeId' | 'onAccept' | 'onReject' | 'onJumpTo'>) {
   const [open, setOpen] = useState(defaultOpen)
   const colors = getColor(skillId)
   const pending = items.filter(s => s.verdict === 'pending').length
@@ -114,7 +135,7 @@ function SkillGroup({ skillId, items, defaultOpen = true, onAccept, onReject, on
       {open && (
         <div className="flex flex-col gap-1.5 p-2 bg-white">
           {items.map(s => s.type === 'annotation'
-            ? <AnnotationCard key={s.id} item={s} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
+            ? <AnnotationCard key={s.id} item={s} active={s.id === activeId} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
             : s.type === 'sidepanel'
             ? <SidePanelCard key={s.id} item={s} onAccept={onAccept} onReject={onReject} />
             : null
@@ -125,7 +146,7 @@ function SkillGroup({ skillId, items, defaultOpen = true, onAccept, onReject, on
   )
 }
 
-export default function ReviewSidebar({ suggestions, onAccept, onReject, onJumpTo }: ReviewSidebarProps) {
+export default function ReviewSidebar({ suggestions, activeId, onAccept, onReject, onJumpTo }: ReviewSidebarProps) {
   if (suggestions.length === 0) {
     return (
       <div className="p-6 text-sm text-neutral-400 text-center mt-8 leading-relaxed">
@@ -154,7 +175,7 @@ export default function ReviewSidebar({ suggestions, onAccept, onReject, onJumpT
             Pending <span className="font-normal text-neutral-400">({pending.length})</span>
           </p>
           {Array.from(groupBySkill(pending).entries()).map(([skillId, items]) => (
-            <SkillGroup key={skillId} skillId={skillId} items={items} defaultOpen onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
+            <SkillGroup key={skillId} skillId={skillId} items={items} defaultOpen activeId={activeId} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
           ))}
         </>
       )}
@@ -165,7 +186,7 @@ export default function ReviewSidebar({ suggestions, onAccept, onReject, onJumpT
             Resolved <span className="font-normal">({done.length})</span>
           </p>
           {Array.from(groupBySkill(done).entries()).map(([skillId, items]) => (
-            <SkillGroup key={skillId} skillId={skillId} items={items} defaultOpen={false} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
+            <SkillGroup key={skillId} skillId={skillId} items={items} defaultOpen={false} activeId={activeId} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
           ))}
         </>
       )}
