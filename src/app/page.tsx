@@ -402,20 +402,13 @@ export default function Home() {
     const text = suggestion.text
     if (!text) return
 
-    // Get editor markdown and find text position
-    const markdown = editorRef.current?.getMarkdown() ?? ''
-    const index = markdown.indexOf(text)
-    if (index === -1) return
-
-    // Scroll editor into view
-    const editorEl = document.querySelector('[role="textbox"]') as HTMLElement
-    if (editorEl) {
-      editorEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      editorEl.focus()
+    // Try to find and select text in editor
+    const found = editorRef.current?.findAndSelect(text)
+    if (found) {
+      // Scroll editor container into view
+      const editorContainer = document.querySelector('[role="textbox"]')?.closest('.w-full')
+      editorContainer?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
-
-    // Highlight via browser find
-    ;(window as unknown as { find?: (s: string) => void }).find?.(text)
   }, [suggestions])
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -12,6 +12,7 @@ export interface EditorHandle {
   getSelectedText: () => string
   setContent: (html: string) => void
   deleteBeforeCursor: (charCount: number) => void
+  findAndSelect: (text: string) => boolean
 }
 
 interface EditorProps {
@@ -74,6 +75,29 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       if (!editor) return
       const { from } = editor.state.selection
       editor.commands.deleteRange({ from: Math.max(0, from - charCount), to: from })
+    },
+    findAndSelect: (searchText: string) => {
+      if (!editor) return false
+      const doc = editor.state.doc
+      let found = false
+
+      // Search for text in the document
+      doc.descendants((node, pos) => {
+        if (found) return false
+        if (node.isText && node.text?.includes(searchText)) {
+          const index = node.text.indexOf(searchText)
+          if (index !== -1) {
+            const start = pos + index
+            const end = start + searchText.length
+            editor.commands.setSelection({ from: start, to: end })
+            editor.view.dispatch(editor.state.tr.scrollIntoView())
+            found = true
+            return false
+          }
+        }
+      })
+
+      return found
     },
   }))
 
