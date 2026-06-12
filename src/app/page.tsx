@@ -397,13 +397,26 @@ export default function Home() {
   }, [])
 
   const handleJumpTo = useCallback((id: string) => {
+    console.log('[handleJumpTo] Called with id:', id)
     const suggestion = suggestions.find(s => s.id === id) as Annotation | undefined
-    if (!suggestion || suggestion.type !== 'annotation') return
+    if (!suggestion) {
+      console.log('[handleJumpTo] Suggestion not found')
+      return
+    }
+    if (suggestion.type !== 'annotation') {
+      console.log('[handleJumpTo] Not an annotation')
+      return
+    }
     const text = suggestion.text
-    if (!text) return
+    console.log('[handleJumpTo] Text to find:', JSON.stringify(text))
+    if (!text) {
+      console.log('[handleJumpTo] Text is empty')
+      return
+    }
 
     // Try to find and select text in editor
     const found = editorRef.current?.findAndSelect(text)
+    console.log('[handleJumpTo] Found:', found)
     if (found) {
       // Scroll editor container into view
       const editorContainer = document.querySelector('[role="textbox"]')?.closest('.w-full')

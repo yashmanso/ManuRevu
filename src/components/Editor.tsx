@@ -77,27 +77,41 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       editor.commands.deleteRange({ from: Math.max(0, from - charCount), to: from })
     },
     findAndSelect: (searchText: string) => {
-      if (!editor) return false
-      const doc = editor.state.doc
-      let found = false
+      if (!editor) {
+        console.log('[Jump] No editor')
+        return false
+      }
 
-      // Search for text in the document
-      doc.descendants((node, pos) => {
-        if (found) return false
-        if (node.isText && node.text?.includes(searchText)) {
-          const index = node.text.indexOf(searchText)
-          if (index !== -1) {
-            const start = pos + index
-            const end = start + searchText.length
-            editor.commands.setSelection({ from: start, to: end })
-            editor.view.dispatch(editor.state.tr.scrollIntoView())
-            found = true
-            return false
-          }
-        }
-      })
+      const fullText = editor.state.doc.textContent
+      console.log('[Jump] Searching for:', JSON.stringify(searchText))
+      console.log('[Jump] Full doc length:', fullText.length)
 
-      return found
+      // Try direct search in full text
+      const index = fullText.indexOf(searchText)
+      if (index !== -1) {
+        console.log('[Jump] Found at index:', index)
+        editor.commands.setSelection({ from: index, to: index + searchText.length })
+        setTimeout(() => {
+          editor.view.dispatch(editor.state.tr.scrollIntoView())
+        }, 0)
+        return true
+      }
+
+      console.log('[Jump] Text not found, trying partial match...')
+      // Try partial/fuzzy match - first 50 chars
+      const searchShort = searchText.substring(0, 50).trim()
+      const indexShort = fullText.indexOf(searchShort)
+      if (indexShort !== -1) {
+        console.log('[Jump] Found partial match at:', indexShort)
+        editor.commands.setSelection({ from: indexShort, to: indexShort + searchShort.length })
+        setTimeout(() => {
+          editor.view.dispatch(editor.state.tr.scrollIntoView())
+        }, 0)
+        return true
+      }
+
+      console.log('[Jump] No match found')
+      return false
     },
   }))
 
