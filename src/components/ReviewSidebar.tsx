@@ -36,10 +36,10 @@ function AnnotationCard({ item, onAccept, onReject, onJumpTo }: { item: Annotati
       <div className="px-3 py-2.5">
         <p className="text-neutral-800 text-sm leading-snug mb-1">{item.message}</p>
         {item.text && (
-          <p className="text-neutral-400 text-xs italic line-clamp-2 mb-1.5">"{item.text}"</p>
+          <p className="text-neutral-500 text-xs italic mb-1.5 leading-relaxed break-words">"{item.text}"</p>
         )}
         {item.suggestion && (
-          <p className="text-green-700 text-xs font-medium">→ {item.suggestion}</p>
+          <p className="text-green-700 text-xs font-medium leading-relaxed">→ {item.suggestion}</p>
         )}
       </div>
       {!resolved && (

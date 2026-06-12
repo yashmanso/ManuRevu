@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Highlight from '@tiptap/extension-highlight'
-import { Selection } from '@tiptap/pm/state'
+import { TextSelection } from 'prosemirror-state'
 import { useEffect, forwardRef, useImperativeHandle } from 'react'
 
 export interface EditorHandle {
@@ -94,7 +94,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
           console.log('[Jump] Found match (length', len, ') at index:', index)
           // Select from this position and extend ~200 chars for context
           const endPos = Math.min(index + 200, fullText.length)
-          const selection = Selection.create(editor.state.doc, index, endPos)
+          const selection = TextSelection.create(editor.state.doc, index, endPos)
           const tr = editor.state.tr.setSelection(selection)
           editor.view.dispatch(tr.scrollIntoView())
           return true
@@ -107,7 +107,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       if (lastIndex !== -1) {
         console.log('[Jump] Found with 30-char fallback at:', lastIndex)
         const endPos = Math.min(lastIndex + 200, fullText.length)
-        const selection = Selection.create(editor.state.doc, lastIndex, endPos)
+        const selection = TextSelection.create(editor.state.doc, lastIndex, endPos)
         const tr = editor.state.tr.setSelection(selection)
         editor.view.dispatch(tr.scrollIntoView())
         return true
