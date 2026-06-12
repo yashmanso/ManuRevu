@@ -80,48 +80,37 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
     findAndSelect: (searchText: string) => {
       if (!editor) return false
 
-      const fullText = editor.state.doc.textContent
+      // Walk text nodes to build a char-offset → PM-position mapping.
+      // textContent concatenates all text but throws away node boundaries,
+      // so textContent[i] != PMpos[i]. We fix that here.
+      interface Chunk { charFrom: number; text: string; pmFrom: number }
+      const chunks: Chunk[] = []
+      let charOffset = 0
+      editor.state.doc.descendants((node, pos) => {
+        if (node.isText && node.text) {
+          chunks.push({ charFrom: charOffset, text: node.text, pmFrom: pos })
+          charOffset += node.text.length
+        }
+      })
+      const flatText = chunks.map(c => c.text).join('')
 
-      // Normalize: collapse multiple spaces to single space
-      const normalize = (s: string) => s.replace(/\s+/g, ' ').trim()
-      const normalizedFull = normalize(fullText)
-      const normalizedSearch = normalize(searchText)
+      const charToPM = (ci: number): number => {
+        for (let i = chunks.length - 1; i >= 0; i--) {
+          const c = chunks[i]
+          if (c.charFrom <= ci) return c.pmFrom + (ci - c.charFrom)
+        }
+        return 0
+      }
 
-      // Try progressively shorter chunks of the normalized search text
-      for (let len = normalizedSearch.length; len >= 30; len -= 15) {
-        const chunk = normalizedSearch.substring(0, len)
-        const index = normalizedFull.indexOf(chunk)
-
-        if (index !== -1) {
-          // Found a match. Now find the sentence boundaries in the original fullText
-          // to select the complete sentence, not just the match
-
-          // Find start of sentence (from index backwards to last . ! ?)
-          let sentenceStart = 0
-          for (let i = index - 1; i >= 0; i--) {
-            if (normalizedFull[i] === '.' || normalizedFull[i] === '!' || normalizedFull[i] === '?') {
-              sentenceStart = i + 1
-              break
-            }
-          }
-
-          // Find end of sentence (from index+chunk.length forwards to next . ! ?)
-          let sentenceEnd = normalizedFull.length
-          for (let i = index + chunk.length; i < normalizedFull.length; i++) {
-            if (normalizedFull[i] === '.' || normalizedFull[i] === '!' || normalizedFull[i] === '?') {
-              sentenceEnd = i + 1
-              break
-            }
-          }
-
-          // Trim whitespace at boundaries
-          while (sentenceStart < sentenceEnd && /\s/.test(normalizedFull[sentenceStart])) sentenceStart++
-          while (sentenceEnd > sentenceStart && /\s/.test(normalizedFull[sentenceEnd - 1])) sentenceEnd--
-
-          // Apply selection
-          const selection = TextSelection.create(editor.state.doc, sentenceStart, sentenceEnd)
-          const tr = editor.state.tr.setSelection(selection).scrollIntoView()
-          editor.view.dispatch(tr)
+      // Try progressively shorter prefixes of the search text
+      for (let len = searchText.length; len >= 30; len -= 15) {
+        const chunk = searchText.substring(0, len).trim()
+        const idx = flatText.indexOf(chunk)
+        if (idx !== -1) {
+          const from = charToPM(idx)
+          const to = charToPM(idx + chunk.length)
+          const sel = TextSelection.create(editor.state.doc, from, to)
+          editor.view.dispatch(editor.state.tr.setSelection(sel).scrollIntoView())
           editor.view.focus()
           return true
         }
