@@ -37,6 +37,9 @@ type SaveState = 'idle' | 'saving' | 'saved'
 
 const MANUSCRIPT_ID = 'current'
 
+// Skills that always run locally regardless of server flag
+const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-choice', 'article-usage'])
+
 let idCounter = 0
 function genId(): string {
   idCounter++
@@ -317,7 +320,7 @@ export default function Home() {
     }
 
     // Run local skills without any API call
-    if (skill.local) {
+    if (skill.local || LOCAL_SKILL_IDS.has(skill.id)) {
       const localResult = runLocalSkill(skill.id, manuscript, editorRef.current?.getSelectedText() || undefined)
       if (localResult) {
         const newItems: Annotation[] = localResult.issues.map((issue) => ({

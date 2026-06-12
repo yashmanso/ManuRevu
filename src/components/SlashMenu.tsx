@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
 
+const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-choice', 'article-usage'])
+
 interface Skill {
   id: string
   name: string
@@ -81,9 +83,9 @@ export default function SlashMenu({ skills, hasSelection, position, query, onSel
                 )}
                 <Badge
                   variant="secondary"
-                  className={`text-xs ${skill.local ? 'bg-green-100 text-green-700 border border-green-200' : ''}`}
+                  className={`text-xs ${(skill.local || LOCAL_SKILL_IDS.has(skill.id)) ? 'bg-green-100 text-green-700 border border-green-200' : ''}`}
                 >
-                  {skill.local ? 'local' : skill.tier}
+                  {(skill.local || LOCAL_SKILL_IDS.has(skill.id)) ? 'local' : skill.tier}
                 </Badge>
               </span>
             </div>
