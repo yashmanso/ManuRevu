@@ -401,7 +401,20 @@ export default function Home() {
     if (!suggestion || suggestion.type !== 'annotation') return
     const text = suggestion.text
     if (!text) return
-    // Use browser find as fallback
+
+    // Get editor markdown and find text position
+    const markdown = editorRef.current?.getMarkdown() ?? ''
+    const index = markdown.indexOf(text)
+    if (index === -1) return
+
+    // Scroll editor into view
+    const editorEl = document.querySelector('[role="textbox"]') as HTMLElement
+    if (editorEl) {
+      editorEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      editorEl.focus()
+    }
+
+    // Highlight via browser find
     ;(window as unknown as { find?: (s: string) => void }).find?.(text)
   }, [suggestions])
 
