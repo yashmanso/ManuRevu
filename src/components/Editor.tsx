@@ -83,34 +83,37 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       }
 
       const fullText = editor.state.doc.textContent
-      console.log('[Jump] Searching for:', JSON.stringify(searchText))
-      console.log('[Jump] Full doc length:', fullText.length)
+      console.log('[Jump] Searching for:', JSON.stringify(searchText.substring(0, 50)))
 
-      // Try direct search in full text
-      const index = fullText.indexOf(searchText)
-      if (index !== -1) {
-        console.log('[Jump] Found at index:', index)
-        editor.commands.setSelection({ from: index, to: index + searchText.length })
+      // Try progressively shorter chunks (the text might be truncated)
+      for (let len = searchText.length; len >= 20; len -= 10) {
+        const chunk = searchText.substring(0, len).trim()
+        const index = fullText.indexOf(chunk)
+        if (index !== -1) {
+          console.log('[Jump] Found match (length', len, ') at index:', index)
+          // Select from this position and extend ~100 chars for context
+          const endPos = Math.min(index + 200, fullText.length)
+          editor.commands.setSelection({ from: index, to: endPos })
+          setTimeout(() => {
+            editor.view.dispatch(editor.state.tr.scrollIntoView())
+          }, 0)
+          return true
+        }
+      }
+
+      // Last resort: search for any 30-char substring
+      const lastTry = searchText.substring(0, 30).trim()
+      const lastIndex = fullText.indexOf(lastTry)
+      if (lastIndex !== -1) {
+        console.log('[Jump] Found with 30-char fallback at:', lastIndex)
+        editor.commands.setSelection({ from: lastIndex, to: lastIndex + 200 })
         setTimeout(() => {
           editor.view.dispatch(editor.state.tr.scrollIntoView())
         }, 0)
         return true
       }
 
-      console.log('[Jump] Text not found, trying partial match...')
-      // Try partial/fuzzy match - first 50 chars
-      const searchShort = searchText.substring(0, 50).trim()
-      const indexShort = fullText.indexOf(searchShort)
-      if (indexShort !== -1) {
-        console.log('[Jump] Found partial match at:', indexShort)
-        editor.commands.setSelection({ from: indexShort, to: indexShort + searchShort.length })
-        setTimeout(() => {
-          editor.view.dispatch(editor.state.tr.scrollIntoView())
-        }, 0)
-        return true
-      }
-
-      console.log('[Jump] No match found')
+      console.log('[Jump] No match found even with progressive fallback')
       return false
     },
   }))
