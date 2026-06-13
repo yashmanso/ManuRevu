@@ -12,7 +12,10 @@ export async function POST(req: NextRequest) {
   if (!file.name.endsWith('.pdf')) return NextResponse.json({ error: 'PDF only' }, { status: 400 })
 
   fs.mkdirSync(UPLOAD_DIR, { recursive: true })
-  const dest = path.join(UPLOAD_DIR, file.name)
+  // Strip any directory components from the client-supplied name so a crafted
+  // filename (e.g. "../../etc/foo") can't escape the upload directory.
+  const safeName = path.basename(file.name)
+  const dest = path.join(UPLOAD_DIR, safeName)
   const buffer = Buffer.from(await file.arrayBuffer())
   fs.writeFileSync(dest, buffer)
 

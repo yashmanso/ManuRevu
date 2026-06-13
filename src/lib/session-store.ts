@@ -5,7 +5,13 @@ import fs from 'fs'
 const DATA_DIR = path.join(process.cwd(), 'data')
 const DB_PATH = path.join(DATA_DIR, 'sessions.db')
 
+// Reuse a single connection process-wide. Opening a new better-sqlite3
+// handle on every call (the previous behaviour) leaked file handles fast —
+// auto-save alone fires every couple of seconds.
+let _db: Database.Database | null = null
+
 function getDb(): Database.Database {
+  if (_db) return _db
   fs.mkdirSync(DATA_DIR, { recursive: true })
   const db = new Database(DB_PATH)
   db.pragma('journal_mode = WAL')
@@ -42,6 +48,7 @@ function getDb(): Database.Database {
       FOREIGN KEY (session_id) REFERENCES sessions(id)
     );
   `)
+  _db = db
   return db
 }
 

@@ -20,13 +20,13 @@ export default function SectionsStrip({ sections, selectedIds, onToggle, onClear
     : `${selectedIds.size} section${selectedIds.size !== 1 ? 's' : ''}`
 
   return (
-    <div className="bg-white border-b border-neutral-200 shrink-0">
+    <div className="bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
       <button
         onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center gap-2 px-6 py-1.5 text-xs text-neutral-500 hover:bg-neutral-50 transition-colors"
+        className="w-full flex items-center gap-2 px-6 py-1.5 text-xs text-neutral-500 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
       >
-        <span className="text-neutral-400">{expanded ? '▾' : '▸'}</span>
-        <span>Sections ({sections.length}) · scope: <span className={selectedIds.size > 0 ? 'text-blue-600 font-medium' : ''}>{scopeLabel}</span></span>
+        <span className="text-neutral-400 dark:text-neutral-500">{expanded ? '▾' : '▸'}</span>
+        <span>Sections ({sections.length}) · scope: <span className={selectedIds.size > 0 ? 'text-blue-600 dark:text-blue-400 font-medium' : ''}>{scopeLabel}</span></span>
       </button>
       {expanded && (
         <div className="px-6 pb-2">
@@ -40,7 +40,7 @@ export default function SectionsStrip({ sections, selectedIds, onToggle, onClear
           </div>
           <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
             {sections.map(s => (
-              <label key={s.id} className="flex items-center gap-2 text-xs text-neutral-600 cursor-pointer hover:text-neutral-900">
+              <label key={s.id} className="flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-300 cursor-pointer hover:text-neutral-900 dark:hover:text-neutral-100">
                 <input
                   type="checkbox"
                   checked={selectedIds.has(s.id)}

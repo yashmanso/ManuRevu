@@ -173,7 +173,6 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       view.dispatch(view.state.tr.insertText(normalized, from, to))
       return true
     },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []) // intentionally empty — callbacks go through refs
 
   const editor = useEditor({

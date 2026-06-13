@@ -37,24 +37,24 @@ function AnnotationCard({ item, active, onAccept, onReject, onJumpTo }: { item: 
     <div
       data-suggestion-card={item.id}
       onClick={() => !resolved && onJumpTo(item.id)}
-      className={`rounded-md border text-sm overflow-hidden cursor-pointer transition-shadow ${resolved ? 'opacity-50' : ''} ${active ? 'border-neutral-800 shadow-md' : 'border-neutral-200'} bg-white`}
+      className={`rounded-md border text-sm overflow-hidden cursor-pointer transition-shadow ${resolved ? 'opacity-50' : ''} ${active ? 'border-neutral-800 dark:border-neutral-300 shadow-md' : 'border-neutral-200 dark:border-neutral-700'} bg-white dark:bg-neutral-800`}
     >
       <div className="px-3 py-2.5">
-        <p className="text-neutral-800 text-sm leading-snug mb-1.5">{item.message}</p>
+        <p className="text-neutral-800 dark:text-neutral-100 text-sm leading-snug mb-1.5">{item.message}</p>
         {/* Track-changes style before → after when a concrete fix exists */}
         {canApply ? (
           <p className="text-xs leading-relaxed break-words mb-1">
-            <span className="text-red-600 line-through decoration-red-400">{item.match}</span>
+            <span className="text-red-600 dark:text-red-400 line-through decoration-red-400">{item.match}</span>
             {' '}
-            <span className="text-green-700 font-medium">{item.replacement}</span>
+            <span className="text-green-700 dark:text-green-400 font-medium">{item.replacement}</span>
           </p>
         ) : (
           <>
             {item.text && (
-              <p className="text-neutral-500 text-xs italic mb-1 leading-relaxed break-words">&ldquo;{item.text}&rdquo;</p>
+              <p className="text-neutral-500 dark:text-neutral-400 text-xs italic mb-1 leading-relaxed break-words">&ldquo;{item.text}&rdquo;</p>
             )}
             {item.suggestion && (
-              <p className="text-green-700 text-xs font-medium leading-relaxed">→ {item.suggestion}</p>
+              <p className="text-green-700 dark:text-green-400 text-xs font-medium leading-relaxed">→ {item.suggestion}</p>
             )}
           </>
         )}
@@ -78,20 +78,20 @@ function SidePanelCard({ item, onAccept, onReject }: { item: SidePanelItem } & P
   const content = item.content as Record<string, unknown>
   const resolved = item.verdict !== 'pending'
   return (
-    <div className={`rounded-md border text-sm overflow-hidden ${resolved ? 'opacity-50' : ''} border-neutral-200 bg-white`}>
+    <div className={`rounded-md border text-sm overflow-hidden ${resolved ? 'opacity-50' : ''} border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800`}>
       <div className="px-3 py-2.5 space-y-1.5">
-        {!!content.overall_assessment && <p className="text-neutral-700 text-xs">{String(content.overall_assessment)}</p>}
-        {!!content.summary && <p className="text-neutral-700 text-xs">{String(content.summary)}</p>}
+        {!!content.overall_assessment && <p className="text-neutral-700 dark:text-neutral-200 text-xs">{String(content.overall_assessment)}</p>}
+        {!!content.summary && <p className="text-neutral-700 dark:text-neutral-200 text-xs">{String(content.summary)}</p>}
         {Array.isArray(content.issues) && content.issues.slice(0, 3).map((issue: Record<string, unknown>, i: number) => (
-          <div key={i} className="pl-2 border-l-2 border-neutral-300">
-            <p className="text-xs text-neutral-500 font-medium">{String(issue.location ?? issue.section ?? '')}</p>
-            <p className="text-xs text-neutral-700">{String(issue.issue ?? issue.suggestion ?? '')}</p>
+          <div key={i} className="pl-2 border-l-2 border-neutral-300 dark:border-neutral-600">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">{String(issue.location ?? issue.section ?? '')}</p>
+            <p className="text-xs text-neutral-700 dark:text-neutral-200">{String(issue.issue ?? issue.suggestion ?? '')}</p>
           </div>
         ))}
         {Array.isArray(content.conflicts) && content.conflicts.slice(0, 3).map((c: Record<string, unknown>, i: number) => (
-          <div key={i} className="pl-2 border-l-2 border-red-300">
-            <p className="text-xs text-red-600 font-medium">{String(c.severity ?? '')} conflict</p>
-            <p className="text-xs text-neutral-600">{String(c.explanation ?? '')}</p>
+          <div key={i} className="pl-2 border-l-2 border-red-300 dark:border-red-700">
+            <p className="text-xs text-red-600 dark:text-red-400 font-medium">{String(c.severity ?? '')} conflict</p>
+            <p className="text-xs text-neutral-600 dark:text-neutral-300">{String(c.explanation ?? '')}</p>
           </div>
         ))}
       </div>
@@ -133,7 +133,7 @@ function SkillGroup({ skillId, items, defaultOpen = true, activeId, onAccept, on
         </div>
       </button>
       {open && (
-        <div className="flex flex-col gap-1.5 p-2 bg-white">
+        <div className="flex flex-col gap-1.5 p-2 bg-white dark:bg-neutral-900">
           {items.map(s => s.type === 'annotation'
             ? <AnnotationCard key={s.id} item={s} active={s.id === activeId} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
             : s.type === 'sidepanel'
@@ -149,8 +149,8 @@ function SkillGroup({ skillId, items, defaultOpen = true, activeId, onAccept, on
 export default function ReviewSidebar({ suggestions, activeId, onAccept, onReject, onJumpTo }: ReviewSidebarProps) {
   if (suggestions.length === 0) {
     return (
-      <div className="p-6 text-sm text-neutral-400 text-center mt-8 leading-relaxed">
-        Run a skill with <kbd className="px-1 py-0.5 bg-neutral-100 rounded text-xs font-mono">/</kbd> to see suggestions here.
+      <div className="p-6 text-sm text-neutral-400 dark:text-neutral-500 text-center mt-8 leading-relaxed">
+        Run a skill with <kbd className="px-1 py-0.5 bg-neutral-100 dark:bg-neutral-700 dark:text-neutral-300 rounded text-xs font-mono">/</kbd> to see suggestions here.
       </div>
     )
   }
