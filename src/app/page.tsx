@@ -10,6 +10,9 @@ import StatsBar from '@/components/StatsBar'
 import SectionsStrip from '@/components/SectionsStrip'
 import PromptPreviewModal from '@/components/PromptPreviewModal'
 import PromptEditor from '@/components/PromptEditor'
+import AppStatusBar from '@/components/AppStatusBar'
+import ActivityHistory, { type ActivityEntry } from '@/components/ActivityHistory'
+import KnowledgeRepo from '@/components/KnowledgeRepo'
 import type { EditorHandle } from '@/components/Editor'
 import type { Suggestion, Annotation, SidePanelItem } from '@/lib/suggestion-types'
 import { importFile } from '@/lib/import'
@@ -34,6 +37,7 @@ interface Skill {
 
 type RunStatus = 'idle' | 'running'
 type SaveState = 'idle' | 'saving' | 'saved'
+type SidebarTab = 'review' | 'history' | 'knowledge'
 
 const MANUSCRIPT_ID = 'current'
 
@@ -81,12 +85,18 @@ export default function Home() {
   })
   const [hasSelection, setHasSelection] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('review')
+  const [knowledgeRefreshKey, setKnowledgeRefreshKey] = useState(0)
+
+  // Activity history (in-memory, per session)
+  const [activityHistory, setActivityHistory] = useState<ActivityEntry[]>([])
 
   // Local stats + sections (recomputed from debounced markdown)
   const [markdown, setMarkdown] = useState('')
   const [longSentenceThreshold, setLongSentenceThreshold] = useState(35)
   const [selectedSectionIds, setSelectedSectionIds] = useState<Set<string>>(new Set())
   const [darkMode, setDarkMode] = useState(false)
+  const [selectionWords, setSelectionWords] = useState(0)
 
   // Toolbar settings
   const [apiEnabled, setApiEnabled] = useState(true)
@@ -108,6 +118,10 @@ export default function Home() {
 
   const stats = useMemo(() => computeStats(markdown, longSentenceThreshold), [markdown, longSentenceThreshold])
   const sections = useMemo(() => splitSections(markdown), [markdown])
+
+  const addActivity = useCallback((entry: Omit<ActivityEntry, 'id' | 'timestamp'>) => {
+    setActivityHistory(prev => [...prev, { ...entry, id: genId(), timestamp: new Date() }])
+  }, [])
 
   // Load skills + settings on mount
   useEffect(() => {
@@ -158,18 +172,20 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [slashMenu.open])
 
-  // Track selection state
+  // Track selection state + word count
   useEffect(() => {
     const checkSelection = () => {
       const sel = window.getSelection()
-      setHasSelection(!!sel && sel.toString().length > 0)
+      const text = sel?.toString() ?? ''
+      setHasSelection(text.length > 0)
+      const words = text.trim() ? text.trim().split(/\s+/).length : 0
+      setSelectionWords(words)
     }
     document.addEventListener('selectionchange', checkSelection)
     return () => document.removeEventListener('selectionchange', checkSelection)
   }, [])
 
-  // Push inline highlight decorations for every pending annotation so the
-  // flags live in the text and move with it as the user scrolls/edits.
+  // Push inline highlight decorations for every pending annotation
   useEffect(() => {
     const spans = suggestions
       .filter((s): s is Annotation => s.type === 'annotation' && s.verdict === 'pending' && !!s.match)
@@ -198,11 +214,12 @@ export default function Home() {
           body: JSON.stringify({ id: MANUSCRIPT_ID, content: html }),
         })
         setSaveState('saved')
+        addActivity({ type: 'save', label: 'Auto-saved' })
       } catch {
         setSaveState('idle')
       }
     }, 2000)
-  }, [])
+  }, [addActivity])
 
   // Persist toolbar toggles
   const toggleApiEnabled = useCallback(() => {
@@ -252,6 +269,7 @@ export default function Home() {
   const executeRun = useCallback(async (skill: Skill, manuscript: string, selection?: string) => {
     setRunStatus('running')
     setActiveRunLabel(skill.name)
+    addActivity({ type: 'run', label: skill.name, skillId: skill.id, detail: selection ? `on selection (${selection.length} chars)` : 'full manuscript' })
 
     try {
       const res = await fetch(`/api/skills/${skill.id}/run`, {
@@ -310,7 +328,7 @@ export default function Home() {
             id: genId(),
             type: 'annotation' as const,
             text: flagged,
-            match: flagged, // best-effort exact locate; no auto-apply for LLM annotations
+            match: flagged,
             message: issue.reason ?? issue.explanation ?? issue.message ?? '',
             suggestion: issue.suggestion,
           }
@@ -322,6 +340,8 @@ export default function Home() {
           toast.success(`${skill.name}: ${newItems.length} suggestion${newItems.length === 1 ? '' : 's'}`, {
             description: `See the review queue. ${costNote}`,
           })
+          // Auto-switch to review tab when results come in
+          setSidebarTab('review')
         }
       } else if (skill.output === 'sidepanel') {
         let parsed: unknown
@@ -329,6 +349,7 @@ export default function Home() {
         const item: SidePanelItem = { ...baseAttrs, type: 'sidepanel', content: parsed }
         setSuggestions(prev => [...prev, item])
         toast.success(`${skill.name} complete`, { description: `See the review queue. ${costNote}` })
+        setSidebarTab('review')
       }
     } catch (err) {
       console.error('Skill run failed:', err)
@@ -342,7 +363,7 @@ export default function Home() {
       setRunStatus('idle')
       setActiveRunLabel('')
     }
-  }, [])
+  }, [addActivity])
 
   const runSkill = useCallback(async (skill: Skill) => {
     const queryLen = slashMenu.query.length
@@ -351,8 +372,6 @@ export default function Home() {
     editorRef.current?.deleteBeforeCursor(1 + queryLen)
 
     // Run local skills without any API call.
-    // For local skills we only need getPlainText() — skipping getMarkdown() / getHTML()
-    // on large documents prevents a costly DOM serialization on every skill click.
     if (skill.local || LOCAL_SKILL_IDS.has(skill.id)) {
       const plainText = editorRef.current?.getPlainText() ?? ''
       if (!plainText.trim()) {
@@ -361,6 +380,7 @@ export default function Home() {
         })
         return
       }
+      addActivity({ type: 'run', label: skill.name, skillId: skill.id, detail: 'local · no API cost' })
       const localResult = runLocalSkill(skill.id, plainText, longSentenceThreshold)
       if (localResult) {
         const newItems: Annotation[] = localResult.issues.map((issue) => ({
@@ -386,13 +406,14 @@ export default function Home() {
           toast.success(`${skill.name}: ${newItems.length} suggestion${newItems.length === 1 ? '' : 's'}`, {
             description: `Local · no API cost`,
           })
+          setSidebarTab('review')
         }
       }
       return
     }
 
     if (!apiEnabled) {
-      toast.error('API is disabled', { description: 'Re-enable it with the “API off” toggle in the toolbar.' })
+      toast.error('API is disabled', { description: 'Re-enable it with the "API off" toggle in the toolbar.' })
       return
     }
 
@@ -427,11 +448,10 @@ export default function Home() {
     }
 
     await executeRun(skill, manuscript, selection)
-  }, [slashMenu.query, apiEnabled, previewPrompt, scopedManuscript, executeRun, selectedSectionIds, longSentenceThreshold])
+  }, [slashMenu.query, apiEnabled, previewPrompt, scopedManuscript, executeRun, selectedSectionIds, longSentenceThreshold, addActivity])
 
   const handleAccept = useCallback(async (id: string) => {
     const suggestion = suggestions.find(s => s.id === id)
-    // Apply the concrete text change when the annotation carries one.
     if (suggestion?.type === 'annotation' && suggestion.match && suggestion.replacement !== undefined) {
       const applied = editorRef.current?.replaceText(suggestion.match, suggestion.replacement)
       if (!applied) {
@@ -443,37 +463,63 @@ export default function Home() {
       }
     }
     setSuggestions(prev => prev.map(s => s.id === id ? { ...s, verdict: 'accepted' as const } : s))
+    const s = suggestions.find(sg => sg.id === id)
+    addActivity({ type: 'accept', label: s?.skillId ?? '', skillId: s?.skillId, detail: s?.type === 'annotation' ? (s.match ?? s.text ?? '') : '' })
     await fetch('/api/session/log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'decision', run_id: id, decision: 'accepted' }),
     })
-  }, [suggestions])
+  }, [suggestions, addActivity])
 
   const handleReject = useCallback(async (id: string) => {
     setSuggestions(prev => prev.map(s => s.id === id ? { ...s, verdict: 'rejected' as const } : s))
+    const s = suggestions.find(sg => sg.id === id)
+    addActivity({ type: 'reject', label: s?.skillId ?? '', skillId: s?.skillId, detail: s?.type === 'annotation' ? (s.match ?? s.text ?? '') : '' })
     await fetch('/api/session/log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'decision', run_id: id, decision: 'rejected' }),
     })
-  }, [])
+  }, [suggestions, addActivity])
 
   const handleJumpTo = useCallback((id: string) => {
     const suggestion = suggestions.find(s => s.id === id) as Annotation | undefined
     if (!suggestion || suggestion.type !== 'annotation') return
     setActiveSuggestionId(id)
-    // Prefer the exact verbatim `match`; fall back to display text.
     const target = suggestion.match ?? suggestion.text
     if (target) editorRef.current?.selectText(target)
   }, [suggestions])
 
-  // Map a suggestion clicked inside the editor back to its card.
   const handleHighlightClick = useCallback((id: string) => {
     setActiveSuggestionId(id)
     const card = document.querySelector(`[data-suggestion-card="${id}"]`)
     card?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [])
+
+  const handleSaveToKnowledge = useCallback(async (id: string) => {
+    const suggestion = suggestions.find(s => s.id === id) as Annotation | undefined
+    if (!suggestion || suggestion.type !== 'annotation') return
+    const original = suggestion.match ?? suggestion.text ?? ''
+    const fix = suggestion.replacement ?? suggestion.suggestion ?? ''
+    if (!original || !fix) return
+    try {
+      await fetch('/api/knowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: genId(),
+          skill_id: suggestion.skillId,
+          original_text: original,
+          suggestion: fix,
+        }),
+      })
+      setKnowledgeRefreshKey(k => k + 1)
+      toast.success('Saved to Knowledge', { description: 'View it in the Knowledge tab.' })
+    } catch {
+      toast.error('Failed to save to Knowledge')
+    }
+  }, [suggestions])
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -489,103 +535,141 @@ export default function Home() {
     }
   }, [handleEditorChange])
 
+  const pendingCount = suggestions.filter(s => s.verdict === 'pending').length
+  const [knowledgeCount, setKnowledgeCount] = useState(0)
+  useEffect(() => {
+    fetch('/api/knowledge').then(r => r.json()).then((e: unknown[]) => setKnowledgeCount(e.length)).catch(() => {})
+  }, [knowledgeRefreshKey])
+
+  const TAB_META: { id: SidebarTab; label: string; badge?: number }[] = [
+    { id: 'review',    label: 'Review',    badge: pendingCount > 0 ? pendingCount : undefined },
+    { id: 'history',   label: 'History',   badge: activityHistory.length > 0 ? activityHistory.length : undefined },
+    { id: 'knowledge', label: 'Knowledge', badge: knowledgeCount > 0 ? knowledgeCount : undefined },
+  ]
+
   return (
-    <div className="flex h-screen bg-neutral-50 dark:bg-neutral-950 overflow-hidden">
-      {/* Main editor area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Toolbar */}
-        <div className="flex items-center gap-3 px-6 py-3 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
-          <span className="font-semibold text-neutral-800 dark:text-neutral-100 mr-2">ManuRevu</span>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            className="text-xs"
-          >
-            Import .docx / .txt
-          </Button>
-          <input ref={fileInputRef} type="file" accept=".docx,.txt,.md" className="hidden" onChange={handleFileUpload} />
-          <Button size="sm" variant="outline" onClick={() => setShowSettings(true)} className="text-xs">
-            Settings
-          </Button>
-          <button
-            onClick={() => setDarkMode(d => !d)}
-            title="Toggle dark mode"
-            className="px-2 py-0.5 rounded-full text-xs font-medium border transition-colors bg-neutral-100 text-neutral-600 border-neutral-200 hover:bg-neutral-200 dark:bg-neutral-700 dark:text-neutral-300 dark:border-neutral-600 dark:hover:bg-neutral-600"
-          >
-            {darkMode ? '☀ Light' : '☾ Dark'}
-          </button>
-          {/* API enabled toggle */}
-          <button
-            onClick={toggleApiEnabled}
-            title="Toggle LLM API calls (local tools unaffected)"
-            className={`px-2 py-0.5 rounded-full text-xs font-medium border transition-colors ${
-              apiEnabled
-                ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                : 'bg-neutral-100 text-neutral-500 border-neutral-200 hover:bg-neutral-200'
-            }`}
-          >
-            {apiEnabled ? 'API enabled' : 'API off'}
-          </button>
-          {/* Preview prompt checkbox */}
-          <label className="flex items-center gap-1.5 text-xs text-neutral-500 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={previewPrompt}
-              onChange={togglePreviewPrompt}
-              className="rounded border-neutral-300"
-            />
-            Preview prompt
-          </label>
-          <span className="ml-auto flex items-center gap-3">
-            {saveState !== 'idle' && (
-              <span className="text-xs text-neutral-400">{saveState === 'saving' ? 'Saving…' : 'Saved'}</span>
-            )}
-            <span className="text-xs text-neutral-400">
-              {runStatus === 'idle' ? 'Type / to run a skill' : ''}
-            </span>
-          </span>
-        </div>
-        {/* Local stats */}
-        <StatsBar stats={stats} threshold={longSentenceThreshold} onThresholdChange={setLongSentenceThreshold} />
-        {/* Section scope */}
-        <SectionsStrip
-          sections={sections}
-          selectedIds={selectedSectionIds}
-          onToggle={toggleSection}
-          onClear={() => setSelectedSectionIds(new Set())}
-          onSelectAll={() => setSelectedSectionIds(new Set(sections.map(s => s.id)))}
-        />
-        {/* Running banner — visible across full editor width */}
-        {runStatus === 'running' && (
-          <div className="flex items-center gap-2 px-6 py-2 bg-blue-50 border-b border-blue-200 shrink-0">
-            <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm text-blue-700 font-medium">Running <span className="font-semibold">{activeRunLabel}</span>…</span>
-            <span className="text-xs text-blue-400 ml-1">Results will appear in the sidebar</span>
+    <div className="flex flex-col h-screen bg-neutral-50 dark:bg-neutral-950 overflow-hidden">
+      {/* Main content row: editor + sidebar */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Main editor area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Toolbar */}
+          <div className="flex items-center gap-3 px-6 py-2.5 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
+            <span className="font-semibold text-neutral-800 dark:text-neutral-100 mr-1 tracking-tight">ManuRevu</span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-xs"
+            >
+              Import .docx / .txt
+            </Button>
+            <input ref={fileInputRef} type="file" accept=".docx,.txt,.md" className="hidden" onChange={handleFileUpload} />
+            <Button size="sm" variant="outline" onClick={() => setShowSettings(true)} className="text-xs">
+              Settings
+            </Button>
+            <button
+              onClick={() => setDarkMode(d => !d)}
+              title="Toggle dark mode"
+              className="px-2 py-0.5 rounded-full text-xs font-medium border transition-colors bg-neutral-100 text-neutral-600 border-neutral-200 hover:bg-neutral-200 dark:bg-neutral-700 dark:text-neutral-300 dark:border-neutral-600 dark:hover:bg-neutral-600"
+            >
+              {darkMode ? '☀ Light' : '☾ Dark'}
+            </button>
+            <button
+              onClick={toggleApiEnabled}
+              title="Toggle LLM API calls (local tools unaffected)"
+              className={`px-2 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                apiEnabled
+                  ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                  : 'bg-neutral-100 text-neutral-500 border-neutral-200 hover:bg-neutral-200'
+              }`}
+            >
+              {apiEnabled ? 'API on' : 'API off'}
+            </button>
+            <label className="flex items-center gap-1.5 text-xs text-neutral-500 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={previewPrompt}
+                onChange={togglePreviewPrompt}
+                className="rounded border-neutral-300"
+              />
+              Preview prompt
+            </label>
           </div>
-        )}
-        {/* Editor */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 bg-neutral-50 dark:bg-neutral-950">
-          <Editor ref={editorRef} onChange={handleEditorChange} onReady={handleEditorReady} onHighlightClick={handleHighlightClick} />
+          {/* Local stats */}
+          <StatsBar stats={stats} threshold={longSentenceThreshold} onThresholdChange={setLongSentenceThreshold} />
+          {/* Section scope */}
+          <SectionsStrip
+            sections={sections}
+            selectedIds={selectedSectionIds}
+            onToggle={toggleSection}
+            onClear={() => setSelectedSectionIds(new Set())}
+            onSelectAll={() => setSelectedSectionIds(new Set(sections.map(s => s.id)))}
+          />
+          {/* Editor */}
+          <div className="flex-1 overflow-y-auto px-8 py-6 bg-neutral-50 dark:bg-neutral-950">
+            <Editor ref={editorRef} onChange={handleEditorChange} onReady={handleEditorReady} onHighlightClick={handleHighlightClick} />
+          </div>
+        </div>
+
+        {/* Sidebar */}
+        <div className="w-80 shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex flex-col overflow-hidden">
+          {/* Tabs */}
+          <div className="flex border-b border-neutral-200 dark:border-neutral-700 shrink-0">
+            {TAB_META.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setSidebarTab(tab.id)}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2.5 text-xs font-medium transition-colors border-b-2 ${
+                  sidebarTab === tab.id
+                    ? 'border-neutral-800 dark:border-neutral-200 text-neutral-900 dark:text-neutral-100'
+                    : 'border-transparent text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300'
+                }`}
+              >
+                {tab.label}
+                {tab.badge != null && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                    sidebarTab === tab.id
+                      ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900'
+                      : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400'
+                  }`}>
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          <div className="flex-1 overflow-y-auto">
+            {sidebarTab === 'review' && (
+              <ReviewSidebar
+                suggestions={suggestions}
+                activeId={activeSuggestionId}
+                onAccept={handleAccept}
+                onReject={handleReject}
+                onJumpTo={handleJumpTo}
+                onSaveToKnowledge={handleSaveToKnowledge}
+              />
+            )}
+            {sidebarTab === 'history' && (
+              <ActivityHistory entries={activityHistory} />
+            )}
+            {sidebarTab === 'knowledge' && (
+              <KnowledgeRepo refreshKey={knowledgeRefreshKey} />
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Sidebar */}
-      <div className="w-80 shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 overflow-y-auto">
-        <div className="px-4 py-3 border-b border-neutral-100 dark:border-neutral-700 flex items-center justify-between">
-          <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">Review Queue</span>
-          <Badge variant="secondary" className="text-xs">
-            {suggestions.filter(s => s.verdict === 'pending').length} pending
-          </Badge>
-        </div>
-        <ReviewSidebar
-          suggestions={suggestions}
-          activeId={activeSuggestionId}
-          onAccept={handleAccept}
-          onReject={handleReject}
-          onJumpTo={handleJumpTo}
-        />
-      </div>
+      {/* Bottom status bar */}
+      <AppStatusBar
+        saveState={saveState}
+        runStatus={runStatus}
+        activeRunLabel={activeRunLabel}
+        wordCount={stats.words}
+        selectionWords={selectionWords}
+      />
 
       {/* Slash command menu */}
       {slashMenu.open && (

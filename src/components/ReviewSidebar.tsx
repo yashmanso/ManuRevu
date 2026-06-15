@@ -28,9 +28,11 @@ interface ReviewSidebarProps {
   onAccept: (id: string) => void
   onReject: (id: string) => void
   onJumpTo: (id: string) => void
+  onSaveToKnowledge?: (id: string) => void
 }
 
-function AnnotationCard({ item, active, onAccept, onReject, onJumpTo }: { item: Annotation; active?: boolean } & Pick<ReviewSidebarProps, 'onAccept' | 'onReject' | 'onJumpTo'>) {
+function AnnotationCard({ item, active, onAccept, onReject, onJumpTo, onSaveToKnowledge }: { item: Annotation; active?: boolean } & Pick<ReviewSidebarProps, 'onAccept' | 'onReject' | 'onJumpTo' | 'onSaveToKnowledge'>) {
+  const [saved, setSaved] = useState(false)
   const resolved = item.verdict !== 'pending'
   const canApply = !!item.match && item.replacement !== undefined
   return (
@@ -68,6 +70,17 @@ function AnnotationCard({ item, active, onAccept, onReject, onJumpTo }: { item: 
           <Button size="sm" variant="outline" className="h-6 text-xs px-2 text-red-600 border-red-200 hover:bg-red-50" onClick={() => onReject(item.id)}>
             {canApply ? 'Reject' : 'Dismiss'}
           </Button>
+          {onSaveToKnowledge && (canApply || item.suggestion) && (
+            <Button
+              size="sm"
+              variant="outline"
+              className={`h-6 text-xs px-2 ${saved ? 'text-yellow-600 border-yellow-300' : 'text-neutral-400 border-neutral-200 hover:text-yellow-600 hover:border-yellow-300'}`}
+              title="Save to Knowledge"
+              onClick={() => { setSaved(true); onSaveToKnowledge(item.id) }}
+            >
+              {saved ? '★' : '☆'}
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -105,11 +118,11 @@ function SidePanelCard({ item, onAccept, onReject }: { item: SidePanelItem } & P
   )
 }
 
-function SkillGroup({ skillId, items, defaultOpen = true, activeId, onAccept, onReject, onJumpTo }: {
+function SkillGroup({ skillId, items, defaultOpen = true, activeId, onAccept, onReject, onJumpTo, onSaveToKnowledge }: {
   skillId: string
   items: Suggestion[]
   defaultOpen?: boolean
-} & Pick<ReviewSidebarProps, 'activeId' | 'onAccept' | 'onReject' | 'onJumpTo'>) {
+} & Pick<ReviewSidebarProps, 'activeId' | 'onAccept' | 'onReject' | 'onJumpTo' | 'onSaveToKnowledge'>) {
   const [open, setOpen] = useState(defaultOpen)
   const colors = getColor(skillId)
   const pending = items.filter(s => s.verdict === 'pending').length
@@ -135,7 +148,7 @@ function SkillGroup({ skillId, items, defaultOpen = true, activeId, onAccept, on
       {open && (
         <div className="flex flex-col gap-1.5 p-2 bg-white dark:bg-neutral-900">
           {items.map(s => s.type === 'annotation'
-            ? <AnnotationCard key={s.id} item={s} active={s.id === activeId} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
+            ? <AnnotationCard key={s.id} item={s} active={s.id === activeId} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} onSaveToKnowledge={onSaveToKnowledge} />
             : s.type === 'sidepanel'
             ? <SidePanelCard key={s.id} item={s} onAccept={onAccept} onReject={onReject} />
             : null
@@ -146,7 +159,7 @@ function SkillGroup({ skillId, items, defaultOpen = true, activeId, onAccept, on
   )
 }
 
-export default function ReviewSidebar({ suggestions, activeId, onAccept, onReject, onJumpTo }: ReviewSidebarProps) {
+export default function ReviewSidebar({ suggestions, activeId, onAccept, onReject, onJumpTo, onSaveToKnowledge }: ReviewSidebarProps) {
   if (suggestions.length === 0) {
     return (
       <div className="p-6 text-sm text-neutral-400 dark:text-neutral-500 text-center mt-8 leading-relaxed">
@@ -175,7 +188,7 @@ export default function ReviewSidebar({ suggestions, activeId, onAccept, onRejec
             Pending <span className="font-normal text-neutral-400">({pending.length})</span>
           </p>
           {Array.from(groupBySkill(pending).entries()).map(([skillId, items]) => (
-            <SkillGroup key={skillId} skillId={skillId} items={items} defaultOpen activeId={activeId} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
+            <SkillGroup key={skillId} skillId={skillId} items={items} defaultOpen activeId={activeId} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} onSaveToKnowledge={onSaveToKnowledge} />
           ))}
         </>
       )}
@@ -186,7 +199,7 @@ export default function ReviewSidebar({ suggestions, activeId, onAccept, onRejec
             Resolved <span className="font-normal">({done.length})</span>
           </p>
           {Array.from(groupBySkill(done).entries()).map(([skillId, items]) => (
-            <SkillGroup key={skillId} skillId={skillId} items={items} defaultOpen={false} activeId={activeId} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} />
+            <SkillGroup key={skillId} skillId={skillId} items={items} defaultOpen={false} activeId={activeId} onAccept={onAccept} onReject={onReject} onJumpTo={onJumpTo} onSaveToKnowledge={onSaveToKnowledge} />
           ))}
         </>
       )}

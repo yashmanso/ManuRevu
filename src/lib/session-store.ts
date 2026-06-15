@@ -47,6 +47,15 @@ function getDb(): Database.Database {
       updated_at TEXT NOT NULL,
       FOREIGN KEY (session_id) REFERENCES sessions(id)
     );
+
+    CREATE TABLE IF NOT EXISTS knowledge_entries (
+      id TEXT PRIMARY KEY,
+      skill_id TEXT NOT NULL,
+      original_text TEXT NOT NULL,
+      suggestion TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL
+    );
   `)
   _db = db
   return db
@@ -97,4 +106,32 @@ export function loadManuscript(id: string): { content: string; title?: string } 
   const db = getDb()
   const row = db.prepare(`SELECT content, title FROM manuscripts WHERE id = ?`).get(id) as { content: string; title?: string } | undefined
   return row ?? null
+}
+
+export interface KnowledgeEntry {
+  id: string
+  skill_id: string
+  original_text: string
+  suggestion: string
+  note?: string
+  created_at: string
+}
+
+export function listKnowledgeEntries(): KnowledgeEntry[] {
+  const db = getDb()
+  return db.prepare(`SELECT * FROM knowledge_entries ORDER BY created_at DESC`).all() as KnowledgeEntry[]
+}
+
+export function addKnowledgeEntry(entry: Omit<KnowledgeEntry, 'created_at'>): void {
+  const db = getDb()
+  const now = new Date().toISOString()
+  db.prepare(`
+    INSERT INTO knowledge_entries (id, skill_id, original_text, suggestion, note, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(entry.id, entry.skill_id, entry.original_text, entry.suggestion, entry.note ?? null, now)
+}
+
+export function deleteKnowledgeEntry(id: string): void {
+  const db = getDb()
+  db.prepare(`DELETE FROM knowledge_entries WHERE id = ?`).run(id)
 }
