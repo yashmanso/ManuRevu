@@ -20,15 +20,15 @@ export interface ActivityEntry {
   detail?: string
   skillId?: string
   timestamp: Date
-  manuscriptSnapshot?: string
   originalText?: string
   replacementText?: string
+  versionId?: string
 }
 
 interface ActivityHistoryProps {
   entries: ActivityEntry[]
   onJumpToText?: (text: string) => void
-  onViewSnapshot?: (snapshot: string) => void
+  onJumpToVersion?: (versionId: string) => void
 }
 
 function formatTime(d: Date): string {
@@ -49,7 +49,7 @@ const TYPE_LABEL: Record<ActivityEntry['type'], string> = {
   save: 'Saved',
 }
 
-export default function ActivityHistory({ entries, onJumpToText, onViewSnapshot }: ActivityHistoryProps) {
+export default function ActivityHistory({ entries, onJumpToText, onJumpToVersion }: ActivityHistoryProps) {
   if (entries.length === 0) {
     return (
       <div className="p-6 text-sm text-neutral-400 dark:text-neutral-500 text-center mt-8 leading-relaxed">
@@ -58,55 +58,51 @@ export default function ActivityHistory({ entries, onJumpToText, onViewSnapshot 
     )
   }
 
-  const canJump = (entry: ActivityEntry) => (entry.type === 'accept' || entry.type === 'reject') && entry.originalText
-  const canSnapshot = (entry: ActivityEntry) => entry.manuscriptSnapshot
+  const canJump = (e: ActivityEntry) => (e.type === 'accept' || e.type === 'reject') && !!e.originalText
+  const canVersion = (e: ActivityEntry) => e.type === 'run' && !!e.versionId
 
   return (
-    <div className="flex flex-col p-3 gap-1">
+    <div className="flex flex-col p-3 gap-0.5">
       {[...entries].reverse().map(entry => {
         const s = TYPE_STYLE[entry.type]
         const skillLabel = entry.skillId ? (SKILL_LABELS[entry.skillId] ?? entry.skillId) : undefined
-        const isClickable = canJump(entry) || canSnapshot(entry)
+        const isClickable = canJump(entry) || canVersion(entry)
         return (
           <button
             key={entry.id}
-            onClick={() => {
-              if (canJump(entry) && entry.originalText && onJumpToText) {
-                onJumpToText(entry.originalText)
-              } else if (canSnapshot(entry) && onViewSnapshot) {
-                onViewSnapshot(entry.manuscriptSnapshot!)
-              }
-            }}
             disabled={!isClickable}
-            className={`flex items-start gap-2.5 py-1.5 px-2 rounded-md text-left transition-colors ${
-              isClickable ? 'hover:bg-neutral-50 dark:hover:bg-neutral-800 cursor-pointer' : ''
-            } group disabled:cursor-default`}
+            onClick={() => {
+              if (canJump(entry) && entry.originalText) onJumpToText?.(entry.originalText)
+              else if (canVersion(entry) && entry.versionId) onJumpToVersion?.(entry.versionId)
+            }}
+            className={`flex items-start gap-2.5 py-1.5 px-2 rounded-md text-left w-full transition-colors
+              ${isClickable ? 'hover:bg-neutral-50 dark:hover:bg-neutral-800 cursor-pointer' : 'cursor-default'}`}
           >
             <span className={`mt-1.5 w-2 h-2 shrink-0 rounded-full ${s.dot}`} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className={`text-xs font-semibold ${s.text}`}>{TYPE_LABEL[entry.type]}</span>
-                {skillLabel && (
+                {skillLabel ? (
                   <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${s.badge}`}>{skillLabel}</span>
-                )}
-                {!skillLabel && entry.label && (
+                ) : entry.label ? (
                   <span className="text-xs text-neutral-600 dark:text-neutral-300">{entry.label}</span>
-                )}
+                ) : null}
               </div>
               {entry.detail && (
                 <p className="text-xs text-neutral-400 dark:text-neutral-500 truncate mt-0.5">{entry.detail}</p>
               )}
               {isClickable && (
-                <p className="text-xs text-neutral-300 dark:text-neutral-600 mt-1">
-                  {canJump(entry) ? '→ Jump to text' : '→ View snapshot'}
+                <p className="text-xs text-neutral-300 dark:text-neutral-600 mt-0.5">
+                  {canJump(entry) ? '→ Jump to text' : '→ View version snapshot'}
                 </p>
               )}
             </div>
-            <span className="text-xs text-neutral-300 dark:text-neutral-600 shrink-0 mt-0.5 font-mono">{formatTime(entry.timestamp)}</span>
+            <span className="text-xs text-neutral-300 dark:text-neutral-600 shrink-0 mt-0.5 font-mono">
+              {formatTime(entry.timestamp)}
+            </span>
           </button>
         )
       })}
     </div>
   )
 }
-
