@@ -13,6 +13,7 @@ import PromptEditor from '@/components/PromptEditor'
 import AppStatusBar from '@/components/AppStatusBar'
 import ActivityHistory, { type ActivityEntry } from '@/components/ActivityHistory'
 import KnowledgeRepo from '@/components/KnowledgeRepo'
+import SnapshotViewer from '@/components/SnapshotViewer'
 import type { EditorHandle } from '@/components/Editor'
 import type { Suggestion, Annotation, SidePanelItem } from '@/lib/suggestion-types'
 import { importFile } from '@/lib/import'
@@ -87,6 +88,7 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false)
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('review')
   const [knowledgeRefreshKey, setKnowledgeRefreshKey] = useState(0)
+  const [snapshotModal, setSnapshotModal] = useState<{ title: string; snapshot: string } | null>(null)
 
   // Activity history (in-memory, per session)
   const [activityHistory, setActivityHistory] = useState<ActivityEntry[]>([])
@@ -119,8 +121,13 @@ export default function Home() {
   const stats = useMemo(() => computeStats(markdown, longSentenceThreshold), [markdown, longSentenceThreshold])
   const sections = useMemo(() => splitSections(markdown), [markdown])
 
-  const addActivity = useCallback((entry: Omit<ActivityEntry, 'id' | 'timestamp'>) => {
-    setActivityHistory(prev => [...prev, { ...entry, id: genId(), timestamp: new Date() }])
+  const addActivity = useCallback((entry: Omit<ActivityEntry, 'id' | 'timestamp'>, snapshot?: string) => {
+    setActivityHistory(prev => [...prev, {
+      ...entry,
+      manuscriptSnapshot: snapshot,
+      id: genId(),
+      timestamp: new Date(),
+    }])
   }, [])
 
   // Load skills + settings on mount
@@ -269,7 +276,10 @@ export default function Home() {
   const executeRun = useCallback(async (skill: Skill, manuscript: string, selection?: string) => {
     setRunStatus('running')
     setActiveRunLabel(skill.name)
-    addActivity({ type: 'run', label: skill.name, skillId: skill.id, detail: selection ? `on selection (${selection.length} chars)` : 'full manuscript' })
+    addActivity(
+      { type: 'run', label: skill.name, skillId: skill.id, detail: selection ? `on selection (${selection.length} chars)` : 'full manuscript' },
+      editorRef.current?.getMarkdown()
+    )
 
     try {
       const res = await fetch(`/api/skills/${skill.id}/run`, {
@@ -380,7 +390,10 @@ export default function Home() {
         })
         return
       }
-      addActivity({ type: 'run', label: skill.name, skillId: skill.id, detail: 'local · no API cost' })
+      addActivity(
+        { type: 'run', label: skill.name, skillId: skill.id, detail: 'local · no API cost' },
+        editorRef.current?.getMarkdown()
+      )
       const localResult = runLocalSkill(skill.id, plainText, longSentenceThreshold)
       if (localResult) {
         const newItems: Annotation[] = localResult.issues.map((issue) => ({
@@ -464,7 +477,17 @@ export default function Home() {
     }
     setSuggestions(prev => prev.map(s => s.id === id ? { ...s, verdict: 'accepted' as const } : s))
     const s = suggestions.find(sg => sg.id === id)
-    addActivity({ type: 'accept', label: s?.skillId ?? '', skillId: s?.skillId, detail: s?.type === 'annotation' ? (s.match ?? s.text ?? '') : '' })
+    const entry: Omit<ActivityEntry, 'id' | 'timestamp'> = {
+      type: 'accept',
+      label: s?.skillId ?? '',
+      skillId: s?.skillId,
+      detail: s?.type === 'annotation' ? (s.match ?? s.text ?? '') : '',
+    }
+    if (s?.type === 'annotation') {
+      entry.originalText = s.match ?? s.text
+      entry.replacementText = s.replacement ?? s.suggestion
+    }
+    addActivity(entry)
     await fetch('/api/session/log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -475,7 +498,16 @@ export default function Home() {
   const handleReject = useCallback(async (id: string) => {
     setSuggestions(prev => prev.map(s => s.id === id ? { ...s, verdict: 'rejected' as const } : s))
     const s = suggestions.find(sg => sg.id === id)
-    addActivity({ type: 'reject', label: s?.skillId ?? '', skillId: s?.skillId, detail: s?.type === 'annotation' ? (s.match ?? s.text ?? '') : '' })
+    const entry: Omit<ActivityEntry, 'id' | 'timestamp'> = {
+      type: 'reject',
+      label: s?.skillId ?? '',
+      skillId: s?.skillId,
+      detail: s?.type === 'annotation' ? (s.match ?? s.text ?? '') : '',
+    }
+    if (s?.type === 'annotation') {
+      entry.originalText = s.match ?? s.text
+    }
+    addActivity(entry)
     await fetch('/api/session/log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -653,7 +685,16 @@ export default function Home() {
               />
             )}
             {sidebarTab === 'history' && (
-              <ActivityHistory entries={activityHistory} />
+              <ActivityHistory
+                entries={activityHistory}
+                onJumpToText={(text) => {
+                  editorRef.current?.selectText(text)
+                  setSidebarTab('review')
+                }}
+                onViewSnapshot={(snapshot) => {
+                  setSnapshotModal({ title: 'Manuscript at this point', snapshot })
+                }}
+              />
             )}
             {sidebarTab === 'knowledge' && (
               <KnowledgeRepo refreshKey={knowledgeRefreshKey} />
@@ -712,6 +753,14 @@ export default function Home() {
       )}
 
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+
+      {snapshotModal && (
+        <SnapshotViewer
+          title={snapshotModal.title}
+          snapshot={snapshotModal.snapshot}
+          onClose={() => setSnapshotModal(null)}
+        />
+      )}
     </div>
   )
 }
