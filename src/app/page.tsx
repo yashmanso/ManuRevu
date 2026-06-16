@@ -43,17 +43,21 @@ type SidebarTab = 'review' | 'history' | 'knowledge' | 'versions'
 // Skills that always run locally regardless of server flag
 const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-choice', 'article-usage'])
 
-// Inline highlight colors per skill
+// Inline highlight colors per skill — more opaque so they're visible while scrolling
 const SKILL_HIGHLIGHT: Record<string, string> = {
-  'article-usage': 'rgba(59,130,246,0.18)',
-  'long-sentence': 'rgba(168,85,247,0.18)',
-  'verb-simplification': 'rgba(6,182,212,0.18)',
-  'word-choice': 'rgba(20,184,166,0.18)',
-  'clarity-check': 'rgba(249,115,22,0.18)',
-  'structure-flow': 'rgba(239,68,68,0.18)',
+  'article-usage':        'rgba(59,130,246,0.30)',
+  'long-sentence':        'rgba(168,85,247,0.28)',
+  'verb-simplification':  'rgba(6,182,212,0.28)',
+  'word-choice':          'rgba(20,184,166,0.28)',
+  'clarity-check':        'rgba(249,115,22,0.28)',
+  'structure-flow':       'rgba(239,68,68,0.28)',
+  'argument-consistency': 'rgba(236,72,153,0.28)',
+  'citation-claim':       'rgba(99,102,241,0.28)',
+  'convoluted-ambiguous': 'rgba(244,63,94,0.28)',
+  'repetition-detector':  'rgba(132,204,22,0.28)',
 }
 function highlightColor(skillId: string): string {
-  return SKILL_HIGHLIGHT[skillId] ?? 'rgba(245,158,11,0.18)'
+  return SKILL_HIGHLIGHT[skillId] ?? 'rgba(245,158,11,0.30)'
 }
 
 let idCounter = 0
@@ -343,6 +347,7 @@ export default function Home() {
           body: JSON.stringify({ id: pid, content: html }),
         })
         setSaveState('saved')
+        addActivity({ type: 'save', label: 'Auto-saved' })
         // Update project list's updated_at
         setProjects(prev => prev.map(p => p.id === pid ? { ...p, updated_at: new Date().toISOString() } : p))
       } catch {
@@ -385,13 +390,34 @@ export default function Home() {
     return () => document.removeEventListener('selectionchange', check)
   }, [])
 
-  // ── Highlights ──────────────────────────────────────────────────────────────
+  // ── Annotation count per section (for badges in strip + editor) ─────────────
+  const annotationCountBySection = useMemo(() => {
+    const counts: Record<string, number> = {}
+    suggestions.forEach(s => {
+      if (s.type !== 'annotation' || s.verdict !== 'pending' || !s.match) return
+      const section = sections.find(sec => sec.text.includes(s.match!))
+      if (section) counts[section.id] = (counts[section.id] ?? 0) + 1
+    })
+    return counts
+  }, [suggestions, sections])
+
+  // ── Highlights in editor (all pending annotations, visible while scrolling) ──
   useEffect(() => {
     const spans = suggestions
       .filter((s): s is Annotation => s.type === 'annotation' && s.verdict === 'pending' && !!s.match)
       .map(s => ({ id: s.id, match: s.match as string, color: highlightColor(s.skillId), active: s.id === activeSuggestionId }))
     editorRef.current?.setHighlights(spans)
   }, [suggestions, activeSuggestionId])
+
+  // ── Section decorations in editor (badge + selected border) ─────────────────
+  useEffect(() => {
+    const decorations = sections.map(s => ({
+      headingText: s.title,
+      selected: selectedSectionIds.has(s.id),
+      annotationCount: annotationCountBySection[s.id] ?? 0,
+    }))
+    editorRef.current?.setSectionDecorations(decorations)
+  }, [sections, selectedSectionIds, annotationCountBySection])
 
   // ── Toolbar toggles ─────────────────────────────────────────────────────────
   const toggleApiEnabled = useCallback(() => {
@@ -701,9 +727,13 @@ export default function Home() {
 
           <StatsBar stats={stats} threshold={longSentenceThreshold} onThresholdChange={setLongSentenceThreshold} />
           <SectionsStrip
-            sections={sections} selectedIds={selectedSectionIds} onToggle={toggleSection}
+            sections={sections}
+            selectedIds={selectedSectionIds}
+            annotationCounts={annotationCountBySection}
+            onToggle={toggleSection}
             onClear={() => setSelectedSectionIds(new Set())}
             onSelectAll={() => setSelectedSectionIds(new Set(sections.map(s => s.id)))}
+            onJumpTo={s => editorRef.current?.scrollToHeading(s.title)}
           />
 
           {/* Editor */}
