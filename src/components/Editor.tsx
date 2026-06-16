@@ -43,6 +43,8 @@ interface EditorProps {
   onChange?: (markdown: string) => void
   onReady?: () => void
   onHighlightClick?: (id: string) => void
+  onHighlightHover?: (id: string, rect: DOMRect) => void
+  onHighlightLeave?: () => void
 }
 
 function htmlToMarkdown(html: string): string {
@@ -102,13 +104,17 @@ function rangeToPM(map: number[], from: number, to: number): { pmFrom: number; p
 const highlightKey = new PluginKey<DecorationSet>('manurevu-highlights')
 const sectionKey = new PluginKey<DecorationSet>('manurevu-sections')
 
-const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange, onReady, onHighlightClick }, ref) => {
+const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange, onReady, onHighlightClick, onHighlightHover, onHighlightLeave }, ref) => {
   const onChangeRef = useRef(onChange)
   const onReadyRef = useRef(onReady)
   const onHighlightClickRef = useRef(onHighlightClick)
+  const onHighlightHoverRef = useRef(onHighlightHover)
+  const onHighlightLeaveRef = useRef(onHighlightLeave)
   onChangeRef.current = onChange
   onReadyRef.current = onReady
   onHighlightClickRef.current = onHighlightClick
+  onHighlightHoverRef.current = onHighlightHover
+  onHighlightLeaveRef.current = onHighlightLeave
 
   const editorProps = useMemo(() => ({
     attributes: {
@@ -116,9 +122,35 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
     },
     handleClickOn(_view: EditorView, _pos: number, _node: PMNode, _nodePos: number, event: MouseEvent) {
       const target = event.target as HTMLElement
-      const id = target?.closest('[data-mr-highlight]')?.getAttribute('data-mr-highlight')
-      if (id) { onHighlightClickRef.current?.(id); return true }
+      const el = target?.closest('[data-mr-highlight]') as HTMLElement | null
+      if (el) {
+        const id = el.getAttribute('data-mr-highlight')
+        if (id) {
+          onHighlightClickRef.current?.(id)
+          onHighlightHoverRef.current?.(id, el.getBoundingClientRect())
+          return true
+        }
+      }
       return false
+    },
+    handleDOMEvents: {
+      mouseover(_view: EditorView, event: MouseEvent) {
+        const el = (event.target as HTMLElement)?.closest('[data-mr-highlight]') as HTMLElement | null
+        if (el) {
+          const id = el.getAttribute('data-mr-highlight')
+          if (id) onHighlightHoverRef.current?.(id, el.getBoundingClientRect())
+        }
+        return false
+      },
+      mouseout(_view: EditorView, event: MouseEvent) {
+        const from = event.target as HTMLElement
+        const to = event.relatedTarget as HTMLElement | null
+        // Only fire leave if moving outside all highlights
+        if (from.closest('[data-mr-highlight]') && !to?.closest('[data-mr-highlight]')) {
+          onHighlightLeaveRef.current?.()
+        }
+        return false
+      },
     },
     handlePaste(view: EditorView, event: ClipboardEvent): boolean {
       const plain = event.clipboardData?.getData('text/plain')
@@ -224,15 +256,17 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
           if (!overlaps) {
             used.push([idx, end])
             const { pmFrom, pmTo } = rangeToPM(map, idx, end)
+            // Extract the solid RGB from rgba(...) for the underline border
+            const solidColor = span.color.replace(/rgba?\((\d+),\s*(\d+),\s*(\d+)[^)]*\)/, 'rgb($1,$2,$3)')
             decos.push(Decoration.inline(pmFrom, pmTo, {
               class: 'mr-highlight',
               style: [
                 `background-color:${span.color};`,
-                'border-radius:3px;',
-                span.active
-                  ? 'box-shadow:0 0 0 2px rgba(0,0,0,0.25);outline:2px solid rgba(0,0,0,0.15);'
-                  : 'border-bottom:2px solid ' + span.color.replace(/[\d.]+\)$/, '0.8)') + ';',
+                `border-bottom:2.5px solid ${solidColor};`,
+                'border-radius:2px 2px 0 0;',
+                span.active ? `box-shadow:0 0 0 2px ${solidColor};` : '',
                 'cursor:pointer;',
+                'transition:background-color 0.1s;',
               ].join(''),
               'data-mr-highlight': span.id,
             }))

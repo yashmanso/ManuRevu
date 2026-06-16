@@ -22,6 +22,7 @@ import { computeStats } from '@/lib/manuscript-stats'
 import { splitSections } from '@/lib/sections'
 import SettingsPanel from '@/components/SettingsPanel'
 import { runLocalSkill } from '@/lib/local-skills/index'
+import AnnotationPopover from '@/components/AnnotationPopover'
 
 // Editor uses browser APIs — load client-side only
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false })
@@ -120,6 +121,10 @@ export default function Home() {
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const statsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Hover popover ────────────────────────────────────────────────────────────
+  const [popover, setPopover] = useState<{ id: string; rect: DOMRect } | null>(null)
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const stats = useMemo(() => computeStats(markdown, longSentenceThreshold), [markdown, longSentenceThreshold])
   const sections = useMemo(() => splitSections(markdown), [markdown])
@@ -619,7 +624,28 @@ export default function Home() {
 
   const handleHighlightClick = useCallback((id: string) => {
     setActiveSuggestionId(id)
+    // Show popover immediately on click (don't wait for hover delay)
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
     document.querySelector(`[data-suggestion-card="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [])
+
+  const handleHighlightHover = useCallback((id: string, rect: DOMRect) => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+    hoverTimerRef.current = setTimeout(() => setPopover({ id, rect }), 220)
+  }, [])
+
+  const handleHighlightLeave = useCallback(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+    hoverTimerRef.current = setTimeout(() => setPopover(null), 350)
+  }, [])
+
+  const handlePopoverEnter = useCallback(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+  }, [])
+
+  const handlePopoverLeave = useCallback(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+    hoverTimerRef.current = setTimeout(() => setPopover(null), 200)
   }, [])
 
   const handleSaveToKnowledge = useCallback(async (id: string) => {
@@ -738,7 +764,14 @@ export default function Home() {
 
           {/* Editor */}
           <div className="flex-1 overflow-y-auto px-8 py-6 bg-neutral-50 dark:bg-neutral-950">
-            <Editor ref={editorRef} onChange={handleEditorChange} onReady={handleEditorReady} onHighlightClick={handleHighlightClick} />
+            <Editor
+              ref={editorRef}
+              onChange={handleEditorChange}
+              onReady={handleEditorReady}
+              onHighlightClick={handleHighlightClick}
+              onHighlightHover={handleHighlightHover}
+              onHighlightLeave={handleHighlightLeave}
+            />
           </div>
         </div>
 
@@ -817,6 +850,30 @@ export default function Home() {
       )}
 
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+
+      {/* Hover / click popover on inline highlights */}
+      {popover && (() => {
+        const s = suggestions.find(sg => sg.id === popover.id)
+        if (!s || s.type !== 'annotation' || s.verdict !== 'pending') return null
+        return (
+          <AnnotationPopover
+            key={popover.id}
+            message={s.message ?? ''}
+            match={s.match}
+            replacement={s.replacement}
+            suggestion={s.suggestion}
+            skillId={s.skillId}
+            anchorRect={popover.rect}
+            onAccept={() => handleAccept(popover.id)}
+            onReject={() => handleReject(popover.id)}
+            onJump={() => handleJumpTo(popover.id)}
+            onSave={s.match || s.suggestion ? () => handleSaveToKnowledge(popover.id) : undefined}
+            onClose={() => setPopover(null)}
+            onMouseEnter={handlePopoverEnter}
+            onMouseLeave={handlePopoverLeave}
+          />
+        )
+      })()}
     </div>
   )
 }
