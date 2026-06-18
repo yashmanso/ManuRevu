@@ -22,17 +22,34 @@ function extractDoi(text: string): string | undefined {
   return match ? match[0].replace(/[.,;]$/, '') : undefined
 }
 
-export async function indexPdfFile(filePath: string): Promise<void> {
+// Author surnames usually appear near the top of the first page as
+// "Surname, F." groups (byline or reference-style header). Without this,
+// searchPdfIndex's `authors LIKE ?` filter never matches anything.
+function extractAuthors(text: string): string | undefined {
+  const head = text.slice(0, 2000)
+  const surnames = [...head.matchAll(/([A-Z][a-zA-Z'-]+),?\s+[A-Z]\.(?:\s*[A-Z]\.)?/g)].map(m => m[1])
+  return surnames.length > 0 ? surnames.slice(0, 6).join(', ') : undefined
+}
+
+export async function indexPdfFile(
+  filePath: string,
+  vaultSourceId?: string,
+  // When metadata is already known (e.g. from a reference manager's API),
+  // it's more reliable than the in-PDF heuristics below.
+  metadataOverride?: { title?: string; authors?: string; year?: number; doi?: string }
+): Promise<void> {
   try {
     const { text, title } = await parsePdf(filePath)
     const id = Buffer.from(filePath).toString('base64').slice(0, 32)
     indexPdf({
       id,
       file_path: filePath,
-      title,
-      year: extractYear(text),
-      doi: extractDoi(text),
+      title: metadataOverride?.title ?? title,
+      authors: metadataOverride?.authors ?? extractAuthors(text),
+      year: metadataOverride?.year ?? extractYear(text),
+      doi: metadataOverride?.doi ?? extractDoi(text),
       text_excerpt: text.slice(0, 4000), // first 4k chars for matching
+      vault_source_id: vaultSourceId,
     })
   } catch (err) {
     console.warn(`[pdf-indexer] Failed to index ${filePath}:`, err)

@@ -19,6 +19,15 @@ const MODEL_OPTIONS: { value: string; label: string }[] = [
   { value: 'meta-llama/llama-3.1-8b-instruct', label: 'Llama 3.1 8B ($0.06 / $0.06 per M)' },
 ]
 
+interface VaultSource {
+  id: string
+  type: 'local_folder' | 'zotero_group'
+  name: string
+  config_json: string
+  item_count: number
+  last_synced_at: string | null
+}
+
 interface SettingsPanelProps {
   onClose: () => void
 }
@@ -32,9 +41,59 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [cacheCleared, setCacheCleared] = useState<number | null>(null)
   const [clearingCache, setClearingCache] = useState(false)
 
+  const [vaultSources, setVaultSources] = useState<VaultSource[]>([])
+  const [syncingId, setSyncingId] = useState<string | null>(null)
+  const [newSourceType, setNewSourceType] = useState<'local_folder' | 'zotero_group'>('local_folder')
+  const [newSourceName, setNewSourceName] = useState('')
+  const [newFolderPath, setNewFolderPath] = useState('')
+  const [newGroupId, setNewGroupId] = useState('')
+  const [newApiKey, setNewApiKey] = useState('')
+  const [addingSource, setAddingSource] = useState(false)
+
+  const loadVaultSources = () => {
+    fetch('/api/vault/sources').then(r => r.json()).then(setVaultSources).catch(console.error)
+  }
+
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(setSettings).catch(console.error)
+    loadVaultSources()
   }, [])
+
+  const addVaultSource = async () => {
+    if (!newSourceName.trim()) return
+    setAddingSource(true)
+    try {
+      const body = newSourceType === 'local_folder'
+        ? { type: 'local_folder', name: newSourceName, folder_path: newFolderPath }
+        : { type: 'zotero_group', name: newSourceName, group_id: newGroupId, api_key: newApiKey }
+      const res = await fetch('/api/vault/sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        setNewSourceName(''); setNewFolderPath(''); setNewGroupId(''); setNewApiKey('')
+        loadVaultSources()
+      }
+    } finally {
+      setAddingSource(false)
+    }
+  }
+
+  const syncVaultSource = async (id: string) => {
+    setSyncingId(id)
+    try {
+      await fetch(`/api/vault/sources/${id}/sync`, { method: 'POST' })
+      loadVaultSources()
+    } finally {
+      setSyncingId(null)
+    }
+  }
+
+  const removeVaultSource = async (id: string) => {
+    await fetch(`/api/vault/sources/${id}`, { method: 'DELETE' })
+    loadVaultSources()
+  }
 
   const save = async () => {
     setSaving(true)
@@ -188,6 +247,92 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               <input type="file" accept=".pdf" className="hidden" onChange={uploadPdf} />
             </label>
             {uploadStatus && <span className="ml-2 text-xs text-neutral-500">{uploadStatus}</span>}
+          </div>
+        </section>
+
+        {/* Reference Vault — multiple named PDF sources, including reference-manager groups */}
+        <section className="mb-6">
+          <h3 className="text-sm font-medium text-neutral-700 mb-3">Reference Vault</h3>
+          <p className="text-xs text-neutral-400 mb-3">
+            Sources of source PDFs used by Citation–Claim verification. Add a local folder or connect a Zotero group library.
+          </p>
+
+          {vaultSources.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {vaultSources.map(s => (
+                <div key={s.id} className="flex items-center justify-between border border-neutral-200 rounded-md px-3 py-2">
+                  <div>
+                    <p className="text-sm text-neutral-800">{s.name}</p>
+                    <p className="text-xs text-neutral-400">
+                      {s.type === 'zotero_group' ? 'Zotero group' : 'Local folder'} · {s.item_count} PDF{s.item_count !== 1 ? 's' : ''}
+                      {s.last_synced_at ? ` · synced ${new Date(s.last_synced_at).toLocaleString()}` : ' · never synced'}
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Button size="sm" variant="outline" onClick={() => syncVaultSource(s.id)} disabled={syncingId === s.id}>
+                      {syncingId === s.id ? 'Syncing…' : 'Sync'}
+                    </Button>
+                    <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => removeVaultSource(s.id)}>
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="border border-neutral-200 rounded-md p-3">
+            <div className="flex gap-2 mb-2">
+              {(['local_folder', 'zotero_group'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setNewSourceType(t)}
+                  className={`px-3 py-1.5 rounded-md text-xs border transition-colors ${
+                    newSourceType === t
+                      ? 'bg-neutral-900 text-white border-neutral-900'
+                      : 'bg-white text-neutral-600 border-neutral-300 hover:border-neutral-500'
+                  }`}
+                >
+                  {t === 'local_folder' ? 'Local folder' : 'Zotero group'}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              placeholder="Source name"
+              value={newSourceName}
+              onChange={e => setNewSourceName(e.target.value)}
+              className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+            />
+            {newSourceType === 'local_folder' ? (
+              <input
+                type="text"
+                placeholder="/Users/you/Papers"
+                value={newFolderPath}
+                onChange={e => setNewFolderPath(e.target.value)}
+                className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+              />
+            ) : (
+              <>
+                <input
+                  type="text"
+                  placeholder="Zotero group ID"
+                  value={newGroupId}
+                  onChange={e => setNewGroupId(e.target.value)}
+                  className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                />
+                <input
+                  type="password"
+                  placeholder="Zotero API key"
+                  value={newApiKey}
+                  onChange={e => setNewApiKey(e.target.value)}
+                  className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                />
+              </>
+            )}
+            <Button size="sm" onClick={addVaultSource} disabled={addingSource || !newSourceName.trim()}>
+              {addingSource ? 'Adding…' : 'Add source'}
+            </Button>
           </div>
         </section>
 
