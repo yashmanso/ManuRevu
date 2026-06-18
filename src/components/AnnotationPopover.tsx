@@ -14,6 +14,7 @@ const SKILL_META: Record<string, { label: string; color: string; bg: string }> =
   'citation-claim':       { label: 'Citation–Claim',       color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
   'convoluted-ambiguous': { label: 'Convoluted/Ambiguous', color: '#f43f5e', bg: 'rgba(244,63,94,0.1)' },
   'repetition-detector':  { label: 'Repetition',           color: '#84cc16', bg: 'rgba(132,204,22,0.1)' },
+  'reference-consistency': { label: 'Reference Consistency', color: '#d97706', bg: 'rgba(217,119,6,0.1)' },
 }
 
 function getMeta(skillId: string) {

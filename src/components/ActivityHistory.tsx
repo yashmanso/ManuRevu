@@ -11,6 +11,7 @@ const SKILL_LABELS: Record<string, string> = {
   'citation-claim': 'Citation–Claim',
   'convoluted-ambiguous': 'Convoluted/Ambiguous',
   'repetition-detector': 'Repetition',
+  'reference-consistency': 'Reference Consistency',
 }
 
 export interface ActivityEntry {

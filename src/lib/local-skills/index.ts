@@ -2,6 +2,7 @@ import { runLongSentenceLocal } from './long-sentence'
 import { runVerbSimplificationLocal } from './verb-simplification'
 import { runWordChoiceLocal } from './word-choice'
 import { runArticleUsageLocal } from './article-usage'
+import { runReferenceCheckLocal } from './reference-check'
 import { type LocalIssue } from './types'
 
 export type { LocalIssue } from './types'
@@ -25,6 +26,8 @@ export function runLocalSkill(skillId: string, plainText: string, threshold = 35
       return { issues: runWordChoiceLocal(plainText) }
     case 'article-usage':
       return { issues: runArticleUsageLocal(plainText) }
+    case 'reference-consistency':
+      return { issues: runReferenceCheckLocal(plainText) }
     default:
       return null
   }

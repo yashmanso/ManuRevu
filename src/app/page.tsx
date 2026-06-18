@@ -42,7 +42,7 @@ type SaveState = 'idle' | 'saving' | 'saved'
 type SidebarTab = 'review' | 'history' | 'knowledge' | 'versions'
 
 // Skills that always run locally regardless of server flag
-const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-choice', 'article-usage'])
+const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-choice', 'article-usage', 'reference-consistency'])
 
 // Inline highlight colors per skill — more opaque so they're visible while scrolling
 const SKILL_HIGHLIGHT: Record<string, string> = {
@@ -56,6 +56,7 @@ const SKILL_HIGHLIGHT: Record<string, string> = {
   'citation-claim':       'rgba(99,102,241,0.38)',
   'convoluted-ambiguous': 'rgba(244,63,94,0.38)',
   'repetition-detector':  'rgba(132,204,22,0.38)',
+  'reference-consistency': 'rgba(217,119,6,0.38)',
 }
 function highlightColor(skillId: string): string {
   return SKILL_HIGHLIGHT[skillId] ?? 'rgba(245,158,11,0.30)'

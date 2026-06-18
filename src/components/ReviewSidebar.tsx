@@ -16,6 +16,7 @@ const SKILL_COLORS: Record<string, { bg: string; border: string; accent: string;
   'citation-claim':       { bg: 'bg-indigo-50', border: 'border-indigo-200', accent: 'bg-indigo-500', label: 'bg-indigo-100 text-indigo-700' },
   'convoluted-ambiguous': { bg: 'bg-rose-50',   border: 'border-rose-200',   accent: 'bg-rose-500',   label: 'bg-rose-100 text-rose-700' },
   'repetition-detector':  { bg: 'bg-lime-50',   border: 'border-lime-200',   accent: 'bg-lime-500',   label: 'bg-lime-100 text-lime-700' },
+  'reference-consistency': { bg: 'bg-amber-50', border: 'border-amber-200', accent: 'bg-amber-500', label: 'bg-amber-100 text-amber-700' },
 }
 
 function getColor(skillId: string) {
