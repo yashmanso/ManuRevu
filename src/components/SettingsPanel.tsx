@@ -19,13 +19,22 @@ const MODEL_OPTIONS: { value: string; label: string }[] = [
   { value: 'meta-llama/llama-3.1-8b-instruct', label: 'Llama 3.1 8B ($0.06 / $0.06 per M)' },
 ]
 
+type VaultSourceType = 'local_folder' | 'zotero_group' | 'mendeley_library' | 'endnote_library'
+
 interface VaultSource {
   id: string
-  type: 'local_folder' | 'zotero_group'
+  type: VaultSourceType
   name: string
   config_json: string
   item_count: number
   last_synced_at: string | null
+}
+
+const VAULT_TYPE_LABELS: Record<VaultSourceType, string> = {
+  local_folder: 'Local folder',
+  zotero_group: 'Zotero group',
+  mendeley_library: 'Mendeley library',
+  endnote_library: 'EndNote library',
 }
 
 interface SettingsPanelProps {
@@ -43,11 +52,12 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
 
   const [vaultSources, setVaultSources] = useState<VaultSource[]>([])
   const [syncingId, setSyncingId] = useState<string | null>(null)
-  const [newSourceType, setNewSourceType] = useState<'local_folder' | 'zotero_group'>('local_folder')
+  const [newSourceType, setNewSourceType] = useState<VaultSourceType>('local_folder')
   const [newSourceName, setNewSourceName] = useState('')
   const [newFolderPath, setNewFolderPath] = useState('')
   const [newGroupId, setNewGroupId] = useState('')
   const [newApiKey, setNewApiKey] = useState('')
+  const [newAccessToken, setNewAccessToken] = useState('')
   const [addingSource, setAddingSource] = useState(false)
 
   const loadVaultSources = () => {
@@ -63,16 +73,18 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     if (!newSourceName.trim()) return
     setAddingSource(true)
     try {
-      const body = newSourceType === 'local_folder'
-        ? { type: 'local_folder', name: newSourceName, folder_path: newFolderPath }
-        : { type: 'zotero_group', name: newSourceName, group_id: newGroupId, api_key: newApiKey }
+      const body = newSourceType === 'local_folder' || newSourceType === 'endnote_library'
+        ? { type: newSourceType, name: newSourceName, folder_path: newFolderPath }
+        : newSourceType === 'zotero_group'
+        ? { type: 'zotero_group', name: newSourceName, group_id: newGroupId, api_key: newApiKey }
+        : { type: 'mendeley_library', name: newSourceName, access_token: newAccessToken, group_id: newGroupId || undefined }
       const res = await fetch('/api/vault/sources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
       if (res.ok) {
-        setNewSourceName(''); setNewFolderPath(''); setNewGroupId(''); setNewApiKey('')
+        setNewSourceName(''); setNewFolderPath(''); setNewGroupId(''); setNewApiKey(''); setNewAccessToken('')
         loadVaultSources()
       }
     } finally {
@@ -254,7 +266,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
         <section className="mb-6">
           <h3 className="text-sm font-medium text-neutral-700 mb-3">Reference Vault</h3>
           <p className="text-xs text-neutral-400 mb-3">
-            Sources of source PDFs used by Citation–Claim verification. Add a local folder or connect a Zotero group library.
+            Sources of source PDFs used by Citation–Claim verification. Add a local folder, or connect a Zotero, Mendeley, or EndNote library.
           </p>
 
           {vaultSources.length > 0 && (
@@ -264,7 +276,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                   <div>
                     <p className="text-sm text-neutral-800">{s.name}</p>
                     <p className="text-xs text-neutral-400">
-                      {s.type === 'zotero_group' ? 'Zotero group' : 'Local folder'} · {s.item_count} PDF{s.item_count !== 1 ? 's' : ''}
+                      {VAULT_TYPE_LABELS[s.type]} · {s.item_count} PDF{s.item_count !== 1 ? 's' : ''}
                       {s.last_synced_at ? ` · synced ${new Date(s.last_synced_at).toLocaleString()}` : ' · never synced'}
                     </p>
                   </div>
@@ -282,8 +294,8 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           )}
 
           <div className="border border-neutral-200 rounded-md p-3">
-            <div className="flex gap-2 mb-2">
-              {(['local_folder', 'zotero_group'] as const).map(t => (
+            <div className="flex gap-2 mb-2 flex-wrap">
+              {(['local_folder', 'zotero_group', 'mendeley_library', 'endnote_library'] as const).map(t => (
                 <button
                   key={t}
                   onClick={() => setNewSourceType(t)}
@@ -293,7 +305,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                       : 'bg-white text-neutral-600 border-neutral-300 hover:border-neutral-500'
                   }`}
                 >
-                  {t === 'local_folder' ? 'Local folder' : 'Zotero group'}
+                  {VAULT_TYPE_LABELS[t]}
                 </button>
               ))}
             </div>
@@ -304,15 +316,23 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               onChange={e => setNewSourceName(e.target.value)}
               className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
             />
-            {newSourceType === 'local_folder' ? (
-              <input
-                type="text"
-                placeholder="/Users/you/Papers"
-                value={newFolderPath}
-                onChange={e => setNewFolderPath(e.target.value)}
-                className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-              />
-            ) : (
+            {(newSourceType === 'local_folder' || newSourceType === 'endnote_library') && (
+              <>
+                <input
+                  type="text"
+                  placeholder={newSourceType === 'endnote_library' ? '/Users/you/MyLibrary.Data/PDF' : '/Users/you/Papers'}
+                  value={newFolderPath}
+                  onChange={e => setNewFolderPath(e.target.value)}
+                  className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                />
+                {newSourceType === 'endnote_library' && (
+                  <p className="text-xs text-neutral-400 mb-2">
+                    EndNote has no sync API — point this at the &ldquo;&lt;Library&gt;.Data/PDF&rdquo; folder next to your .enl file, where EndNote stores attached PDFs.
+                  </p>
+                )}
+              </>
+            )}
+            {newSourceType === 'zotero_group' && (
               <>
                 <input
                   type="text"
@@ -328,6 +348,27 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                   onChange={e => setNewApiKey(e.target.value)}
                   className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
                 />
+              </>
+            )}
+            {newSourceType === 'mendeley_library' && (
+              <>
+                <input
+                  type="password"
+                  placeholder="Mendeley access token"
+                  value={newAccessToken}
+                  onChange={e => setNewAccessToken(e.target.value)}
+                  className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                />
+                <input
+                  type="text"
+                  placeholder="Group ID (optional — personal library if blank)"
+                  value={newGroupId}
+                  onChange={e => setNewGroupId(e.target.value)}
+                  className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                />
+                <p className="text-xs text-neutral-400 mb-2">
+                  Mendeley uses OAuth2 — generate a personal access token from Mendeley&rsquo;s API console rather than a username/password.
+                </p>
               </>
             )}
             <Button size="sm" onClick={addVaultSource} disabled={addingSource || !newSourceName.trim()}>

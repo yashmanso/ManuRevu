@@ -128,7 +128,7 @@ export function searchPdfIndex(authorFragment: string, year?: number): { file_pa
 
 export interface VaultSource {
   id: string
-  type: 'local_folder' | 'zotero_group'
+  type: 'local_folder' | 'zotero_group' | 'mendeley_library' | 'endnote_library'
   name: string
   config_json: string
   item_count: number
