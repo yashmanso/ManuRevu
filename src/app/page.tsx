@@ -46,16 +46,16 @@ const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-c
 
 // Inline highlight colors per skill — more opaque so they're visible while scrolling
 const SKILL_HIGHLIGHT: Record<string, string> = {
-  'article-usage':        'rgba(59,130,246,0.30)',
-  'long-sentence':        'rgba(168,85,247,0.28)',
-  'verb-simplification':  'rgba(6,182,212,0.28)',
-  'word-choice':          'rgba(20,184,166,0.28)',
-  'clarity-check':        'rgba(249,115,22,0.28)',
-  'structure-flow':       'rgba(239,68,68,0.28)',
-  'argument-consistency': 'rgba(236,72,153,0.28)',
-  'citation-claim':       'rgba(99,102,241,0.28)',
-  'convoluted-ambiguous': 'rgba(244,63,94,0.28)',
-  'repetition-detector':  'rgba(132,204,22,0.28)',
+  'article-usage':        'rgba(59,130,246,0.40)',
+  'long-sentence':        'rgba(168,85,247,0.38)',
+  'verb-simplification':  'rgba(6,182,212,0.38)',
+  'word-choice':          'rgba(20,184,166,0.38)',
+  'clarity-check':        'rgba(249,115,22,0.38)',
+  'structure-flow':       'rgba(239,68,68,0.38)',
+  'argument-consistency': 'rgba(236,72,153,0.38)',
+  'citation-claim':       'rgba(99,102,241,0.38)',
+  'convoluted-ambiguous': 'rgba(244,63,94,0.38)',
+  'repetition-detector':  'rgba(132,204,22,0.38)',
 }
 function highlightColor(skillId: string): string {
   return SKILL_HIGHLIGHT[skillId] ?? 'rgba(245,158,11,0.30)'

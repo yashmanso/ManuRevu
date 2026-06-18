@@ -101,6 +101,22 @@ function rangeToPM(map: number[], from: number, to: number): { pmFrom: number; p
   return { pmFrom, pmTo }
 }
 
+// LLM-flagged text often has minor whitespace/punctuation drift from the source
+// document, so an exact indexOf() misses it. Fall back to a whitespace-flexible
+// regex over the same text so those annotations still resolve to a real range.
+function findMatchRange(text: string, query: string, fromIndex = 0): { idx: number; len: number } | null {
+  const trimmed = query.trim()
+  if (!trimmed) return null
+  const exact = text.indexOf(trimmed, fromIndex)
+  if (exact !== -1) return { idx: exact, len: trimmed.length }
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
+  try {
+    const match = text.slice(fromIndex).match(new RegExp(escaped))
+    if (match && match.index !== undefined) return { idx: fromIndex + match.index, len: match[0].length }
+  } catch { /* malformed pattern from unusual flagged text — give up */ }
+  return null
+}
+
 const highlightKey = new PluginKey<DecorationSet>('manurevu-highlights')
 const sectionKey = new PluginKey<DecorationSet>('manurevu-sections')
 
@@ -223,9 +239,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
     selectText: (match: string) => {
       if (!editor || !match) return false
       const { text, map } = buildTextIndex(editor.state.doc)
-      const idx = text.indexOf(match)
-      if (idx === -1) return false
-      const { pmFrom, pmTo } = rangeToPM(map, idx, idx + match.length)
+      const found = findMatchRange(text, match)
+      if (!found) return false
+      const { pmFrom, pmTo } = rangeToPM(map, found.idx, found.idx + found.len)
       editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pmFrom, pmTo)).scrollIntoView())
       editor.view.focus()
       return true
@@ -233,9 +249,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
     replaceText: (match: string, replacement: string) => {
       if (!editor || !match) return false
       const { text, map } = buildTextIndex(editor.state.doc)
-      const idx = text.indexOf(match)
-      if (idx === -1) return false
-      const { pmFrom, pmTo } = rangeToPM(map, idx, idx + match.length)
+      const found = findMatchRange(text, match)
+      if (!found) return false
+      const { pmFrom, pmTo } = rangeToPM(map, found.idx, found.idx + found.len)
       editor.chain().focus().insertContentAt({ from: pmFrom, to: pmTo }, replacement).run()
       return true
     },
@@ -249,9 +265,10 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
         if (!span.match) continue
         let searchFrom = 0
         for (;;) {
-          const idx = text.indexOf(span.match, searchFrom)
-          if (idx === -1) break
-          const end = idx + span.match.length
+          const found = findMatchRange(text, span.match, searchFrom)
+          if (!found) break
+          const { idx, len } = found
+          const end = idx + len
           const overlaps = used.some(([a, b]) => idx < b && end > a)
           if (!overlaps) {
             used.push([idx, end])
@@ -262,11 +279,11 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
               class: 'mr-highlight',
               style: [
                 `background-color:${span.color};`,
-                `border-bottom:2.5px solid ${solidColor};`,
+                `border-bottom:3px solid ${solidColor};`,
                 'border-radius:2px 2px 0 0;',
                 span.active ? `box-shadow:0 0 0 2px ${solidColor};` : '',
                 'cursor:pointer;',
-                'transition:background-color 0.1s;',
+                'transition:background-color 0.15s, box-shadow 0.15s;',
               ].join(''),
               'data-mr-highlight': span.id,
             }))
@@ -326,9 +343,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
     findAndSelect: (match: string) => {
       if (!editor || !match) return false
       const { text, map } = buildTextIndex(editor.state.doc)
-      const idx = text.indexOf(match)
-      if (idx === -1) return false
-      const { pmFrom, pmTo } = rangeToPM(map, idx, idx + match.length)
+      const found = findMatchRange(text, match)
+      if (!found) return false
+      const { pmFrom, pmTo } = rangeToPM(map, found.idx, found.idx + found.len)
       editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pmFrom, pmTo)).scrollIntoView())
       editor.view.focus()
       return true
