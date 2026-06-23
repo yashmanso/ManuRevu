@@ -95,6 +95,10 @@ export default function Home() {
   const [slashMenu, setSlashMenu] = useState<{ open: boolean; position: { top: number; left: number }; query: string }>({
     open: false, position: { top: 0, left: 0 }, query: '',
   })
+  const [actionsMenu, setActionsMenu] = useState<{ open: boolean; position: { top: number; left: number } }>({
+    open: false, position: { top: 0, left: 0 },
+  })
+  const actionsButtonRef = useRef<HTMLButtonElement>(null)
   const [hasSelection, setHasSelection] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('review')
@@ -534,10 +538,12 @@ export default function Home() {
     }
   }, [addActivity, saveAutoVersion])
 
-  const runSkill = useCallback(async (skill: Skill) => {
+  const runSkill = useCallback(async (skill: Skill, opts?: { viaSlash?: boolean }) => {
+    const viaSlash = opts?.viaSlash !== false
     const queryLen = slashMenu.query.length
     setSlashMenu(m => ({ ...m, open: false }))
-    editorRef.current?.deleteBeforeCursor(1 + queryLen)
+    setActionsMenu(m => ({ ...m, open: false }))
+    if (viaSlash) editorRef.current?.deleteBeforeCursor(1 + queryLen)
 
     if (skill.local || LOCAL_SKILL_IDS.has(skill.id)) {
       const plainText = editorRef.current?.getPlainText() ?? ''
@@ -731,6 +737,22 @@ export default function Home() {
               Import
             </Button>
             <input ref={fileInputRef} type="file" accept=".docx,.txt,.md" className="hidden" onChange={handleFileUpload} />
+            <Button
+              ref={actionsButtonRef}
+              size="sm"
+              variant="outline"
+              className="text-xs"
+              onClick={() => {
+                const rect = actionsButtonRef.current?.getBoundingClientRect()
+                if (!rect) return
+                setActionsMenu(m => ({
+                  open: !m.open,
+                  position: { top: rect.bottom + 6, left: rect.left },
+                }))
+              }}
+            >
+              Actions
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setShowSettings(true)} className="text-xs">
               Settings
             </Button>
@@ -833,6 +855,16 @@ export default function Home() {
           skills={skills} hasSelection={hasSelection} position={slashMenu.position} query={slashMenu.query}
           onSelect={runSkill} onClose={() => setSlashMenu(m => ({ ...m, open: false }))}
           onEditPrompt={skill => { setSlashMenu(m => ({ ...m, open: false })); setEditPromptSkill(skill) }}
+        />
+      )}
+
+      {/* Actions menu — same skill list as "/", reachable without typing */}
+      {actionsMenu.open && (
+        <SlashMenu
+          skills={skills} hasSelection={hasSelection} position={actionsMenu.position} query=""
+          onSelect={skill => runSkill(skill, { viaSlash: false })}
+          onClose={() => setActionsMenu(m => ({ ...m, open: false }))}
+          onEditPrompt={skill => { setActionsMenu(m => ({ ...m, open: false })); setEditPromptSkill(skill) }}
         />
       )}
 
