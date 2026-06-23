@@ -25,8 +25,7 @@ const CreateSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('mendeley_library'),
     name: z.string().min(1),
-    access_token: z.string().min(1),
-    group_id: z.string().optional(),
+    folder_path: z.string().min(1),
   }),
   z.object({
     type: z.literal('endnote_library'),
@@ -44,11 +43,9 @@ export async function POST(req: NextRequest) {
 
   const id = genId()
   const data = parsed.data
-  const config = data.type === 'local_folder' || data.type === 'endnote_library'
-    ? { folder_path: data.folder_path }
-    : data.type === 'zotero_group'
+  const config = data.type === 'zotero_group'
     ? { group_id: data.group_id, api_key: data.api_key }
-    : { access_token: data.access_token, group_id: data.group_id }
+    : { folder_path: data.folder_path }
 
   createVaultSource({ id, type: data.type, name: data.name, config })
   return NextResponse.json({ id })

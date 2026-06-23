@@ -8,11 +8,11 @@ export interface ZoteroGroupConfig {
 }
 
 export interface MendeleyConfig {
-  // Personal access token (Mendeley uses OAuth2; the simplest path for a
-  // single-user desktop tool is a long-lived token from Mendeley's API
-  // console rather than implementing the full OAuth redirect flow).
-  access_token: string
-  group_id?: string
+  // Mendeley's sync API requires a full OAuth2 browser login flow (no
+  // simple API-key auth). Mendeley Desktop also keeps a local copy of every
+  // attached PDF, so — like EndNote — this source type just scans that
+  // folder instead of talking to the API.
+  folder_path: string
 }
 
 export interface EndNoteLibraryConfig {

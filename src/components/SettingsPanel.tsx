@@ -57,7 +57,6 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [newFolderPath, setNewFolderPath] = useState('')
   const [newGroupId, setNewGroupId] = useState('')
   const [newApiKey, setNewApiKey] = useState('')
-  const [newAccessToken, setNewAccessToken] = useState('')
   const [addingSource, setAddingSource] = useState(false)
 
   const loadVaultSources = () => {
@@ -73,18 +72,16 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     if (!newSourceName.trim()) return
     setAddingSource(true)
     try {
-      const body = newSourceType === 'local_folder' || newSourceType === 'endnote_library'
-        ? { type: newSourceType, name: newSourceName, folder_path: newFolderPath }
-        : newSourceType === 'zotero_group'
+      const body = newSourceType === 'zotero_group'
         ? { type: 'zotero_group', name: newSourceName, group_id: newGroupId, api_key: newApiKey }
-        : { type: 'mendeley_library', name: newSourceName, access_token: newAccessToken, group_id: newGroupId || undefined }
+        : { type: newSourceType, name: newSourceName, folder_path: newFolderPath }
       const res = await fetch('/api/vault/sources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
       if (res.ok) {
-        setNewSourceName(''); setNewFolderPath(''); setNewGroupId(''); setNewApiKey(''); setNewAccessToken('')
+        setNewSourceName(''); setNewFolderPath(''); setNewGroupId(''); setNewApiKey('')
         loadVaultSources()
       }
     } finally {
@@ -316,11 +313,15 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               onChange={e => setNewSourceName(e.target.value)}
               className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
             />
-            {(newSourceType === 'local_folder' || newSourceType === 'endnote_library') && (
+            {newSourceType !== 'zotero_group' && (
               <>
                 <input
                   type="text"
-                  placeholder={newSourceType === 'endnote_library' ? '/Users/you/MyLibrary.Data/PDF' : '/Users/you/Papers'}
+                  placeholder={
+                    newSourceType === 'endnote_library' ? '/Users/you/MyLibrary.Data/PDF'
+                    : newSourceType === 'mendeley_library' ? '/Users/you/.local/share/Mendeley Ltd./Mendeley Desktop/Downloaded'
+                    : '/Users/you/Papers'
+                  }
                   value={newFolderPath}
                   onChange={e => setNewFolderPath(e.target.value)}
                   className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
@@ -328,6 +329,11 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                 {newSourceType === 'endnote_library' && (
                   <p className="text-xs text-neutral-400 mb-2">
                     EndNote has no sync API — point this at the &ldquo;&lt;Library&gt;.Data/PDF&rdquo; folder next to your .enl file, where EndNote stores attached PDFs.
+                  </p>
+                )}
+                {newSourceType === 'mendeley_library' && (
+                  <p className="text-xs text-neutral-400 mb-2">
+                    Mendeley&rsquo;s sync API requires a full OAuth2 login flow, so this points at the folder Mendeley Desktop already downloads attached PDFs into on disk.
                   </p>
                 )}
               </>
@@ -348,27 +354,6 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                   onChange={e => setNewApiKey(e.target.value)}
                   className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
                 />
-              </>
-            )}
-            {newSourceType === 'mendeley_library' && (
-              <>
-                <input
-                  type="password"
-                  placeholder="Mendeley access token"
-                  value={newAccessToken}
-                  onChange={e => setNewAccessToken(e.target.value)}
-                  className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                />
-                <input
-                  type="text"
-                  placeholder="Group ID (optional — personal library if blank)"
-                  value={newGroupId}
-                  onChange={e => setNewGroupId(e.target.value)}
-                  className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                />
-                <p className="text-xs text-neutral-400 mb-2">
-                  Mendeley uses OAuth2 — generate a personal access token from Mendeley&rsquo;s API console rather than a username/password.
-                </p>
               </>
             )}
             <Button size="sm" onClick={addVaultSource} disabled={addingSource || !newSourceName.trim()}>
