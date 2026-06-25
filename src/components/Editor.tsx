@@ -167,6 +167,14 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
         }
         return false
       },
+      keydown(_view: EditorView, event: KeyboardEvent) {
+        // "/" is handled by window listener for slash menu, prevent insertion
+        if (event.key === '/') {
+          event.preventDefault()
+          return true
+        }
+        return false
+      },
     },
     handlePaste(view: EditorView, event: ClipboardEvent): boolean {
       const plain = event.clipboardData?.getData('text/plain')

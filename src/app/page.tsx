@@ -370,14 +370,18 @@ export default function Home() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === '/' && !slashMenu.open) {
+        let top = window.innerHeight / 2 - 160
+        let left = window.innerWidth / 2 - 160
+        // Try to position relative to cursor
         const sel = window.getSelection()
-        if (!sel || sel.rangeCount === 0) return
-        const range = sel.getRangeAt(0)
-        const rect = range.getBoundingClientRect()
-        const menuHeight = 320
-        const spaceBelow = window.innerHeight - rect.bottom
-        const top = spaceBelow < menuHeight + 16 ? Math.max(8, rect.top - menuHeight - 8) : rect.bottom + 8
-        const left = Math.min(rect.left, window.innerWidth - 320 - 16)
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0)
+          const rect = range.getBoundingClientRect()
+          const menuHeight = 320
+          const spaceBelow = window.innerHeight - rect.bottom
+          top = spaceBelow < menuHeight + 16 ? Math.max(8, rect.top - menuHeight - 8) : rect.bottom + 8
+          left = Math.min(rect.left, window.innerWidth - 320 - 16)
+        }
         setSlashMenu({ open: true, position: { top, left }, query: '' })
       } else if (slashMenu.open) {
         if (e.key === 'Backspace') setSlashMenu(m => ({ ...m, query: m.query.slice(0, -1) }))
