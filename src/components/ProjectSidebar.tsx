@@ -72,10 +72,13 @@ function ProjectRow({ project, active, onSelect, onRename, onDelete }: {
   }
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onSelect() }}
       onDoubleClick={() => { setDraft(displayName(project)); setEditing(true) }}
-      className={`group w-full text-left px-3 py-2 flex flex-col gap-0.5 rounded-md transition-colors ${
+      className={`group w-full text-left px-3 py-2 flex flex-col gap-0.5 rounded-md transition-colors cursor-pointer ${
         active
           ? 'bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900'
           : 'hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300'
@@ -96,7 +99,7 @@ function ProjectRow({ project, active, onSelect, onRename, onDelete }: {
       <span className={`text-xs ${active ? 'text-neutral-300 dark:text-neutral-600' : 'text-neutral-400 dark:text-neutral-500'}`}>
         {formatDate(project.updated_at)}
       </span>
-    </button>
+    </div>
   )
 }
 
