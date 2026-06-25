@@ -99,6 +99,18 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     }
   }
 
+  const browseFolderPath = async () => {
+    try {
+      const handle = await (window as any).showDirectoryPicker?.()
+      if (handle) {
+        const path = handle.name
+        setNewFolderPath(path)
+      }
+    } catch {
+      // User cancelled or browser doesn't support the API
+    }
+  }
+
   const removeVaultSource = async (id: string) => {
     await fetch(`/api/vault/sources/${id}`, { method: 'DELETE' })
     loadVaultSources()
@@ -315,17 +327,22 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
             />
             {newSourceType !== 'zotero_group' && (
               <>
-                <input
-                  type="text"
-                  placeholder={
-                    newSourceType === 'endnote_library' ? '/Users/you/MyLibrary.Data/PDF'
-                    : newSourceType === 'mendeley_library' ? '/Users/you/.local/share/Mendeley Ltd./Mendeley Desktop/Downloaded'
-                    : '/Users/you/Papers'
-                  }
-                  value={newFolderPath}
-                  onChange={e => setNewFolderPath(e.target.value)}
-                  className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                />
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    placeholder={
+                      newSourceType === 'endnote_library' ? '/Users/you/MyLibrary.Data/PDF'
+                      : newSourceType === 'mendeley_library' ? '/Users/you/.local/share/Mendeley Ltd./Mendeley Desktop/Downloaded'
+                      : '/Users/you/Papers'
+                    }
+                    value={newFolderPath}
+                    onChange={e => setNewFolderPath(e.target.value)}
+                    className="flex-1 border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                  />
+                  <Button size="sm" variant="outline" onClick={browseFolderPath} className="shrink-0">
+                    Browse
+                  </Button>
+                </div>
                 {newSourceType === 'endnote_library' && (
                   <p className="text-xs text-neutral-400 mb-2">
                     EndNote has no sync API — point this at the &ldquo;&lt;Library&gt;.Data/PDF&rdquo; folder next to your .enl file, where EndNote stores attached PDFs.
