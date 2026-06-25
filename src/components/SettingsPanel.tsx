@@ -99,16 +99,24 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     }
   }
 
-  const browseFolderPath = async () => {
+  const pickFolder = async (): Promise<string | null> => {
     try {
-      const handle = await (window as any).showDirectoryPicker?.()
-      if (handle) {
-        const path = handle.name
-        setNewFolderPath(path)
-      }
+      const res = await fetch('/api/folder-picker', { method: 'POST' })
+      const data = await res.json() as { path?: string; error?: string }
+      return data.path ?? null
     } catch {
-      // User cancelled or browser doesn't support the API
+      return null
     }
+  }
+
+  const browseFolderPath = async () => {
+    const path = await pickFolder()
+    if (path) setNewFolderPath(path)
+  }
+
+  const browseWatchedFolder = async () => {
+    const path = await pickFolder()
+    if (path) setSettings(s => ({ ...s, pdf_watch_folder: path }))
   }
 
   const removeVaultSource = async (id: string) => {
@@ -252,6 +260,9 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                 onChange={e => setSettings(s => ({ ...s, pdf_watch_folder: e.target.value }))}
                 className="flex-1 border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-900"
               />
+              <Button size="sm" variant="outline" onClick={browseWatchedFolder}>
+                Browse
+              </Button>
               <Button size="sm" variant="outline" onClick={reindex} disabled={reindexing}>
                 {reindexing ? 'Indexing…' : 'Re-index'}
               </Button>
