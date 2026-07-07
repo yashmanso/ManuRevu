@@ -1,27 +1,28 @@
 // Deterministic reference auditor — no LLM used.
-// Regex-extracts Author-Year citations from the body, parses the bibliography,
-// and reports the set-diff plus a few structural inconsistencies.
+// Extracts Author-Year citations from the body (parenthetical, multi-cite,
+// and narrative forms), parses the reference list, and reports the set-diff
+// plus a few structural inconsistencies.
 
 export interface CitedNotListed {
   key: string        // normalized "Author et al., YYYY"
-  verbatim: string    // exact substring as it appears in the manuscript (for highlighting/jump)
+  verbatim: string   // exact substring as it appears in the manuscript (for highlighting/jump)
 }
 
 export interface ListedNotCited {
   key: string | null
-  entry: string        // exact bibliography entry text (for highlighting/jump)
+  entry: string      // exact bibliography entry text (for highlighting/jump)
 }
 
 export interface DuplicateEntry {
   key: string
-  entries: string[]    // the duplicate bibliography entries, verbatim
+  entries: string[]  // the duplicate bibliography entries, verbatim
 }
 
 export interface YearMismatch {
   author: string
   citedYears: string[]  // years this author is cited with in-text
-  listedYear: string     // year their bibliography entry actually carries
-  verbatim: string        // one in-text occurrence with the mismatched year, for jump
+  listedYear: string    // year their bibliography entry actually carries
+  verbatim: string      // one in-text occurrence with the mismatched year, for jump
 }
 
 export interface RefCheckResult {
@@ -32,39 +33,72 @@ export interface RefCheckResult {
   bibliography_parse_errors: string[]
 }
 
-// Match (Author et al., YYYY) or (Author & Author, YYYY) or (Author, YYYY)
-const INLINE_CITATION_RE = /\(([A-Z][a-zA-Z'-]+(?:\s+et\s+al\.?|(?:\s+&\s+[A-Z][a-zA-Z'-]+))?),?\s+(\d{4}[a-z]?)\)/g
+interface InlineOccurrence {
+  key: string      // normalized "Author, YYYY" / "A & B, YYYY" / "A et al., YYYY"
+  author: string   // first author's surname (for year cross-checks)
+  year: string
+  verbatim: string
+}
 
-interface InlineOccurrence { key: string; author: string; year: string; verbatim: string }
+// Building blocks. Years are restricted to plausible ranges so page numbers
+// and standard names ("ISO 9001") don't register as citations.
+const AUTHOR = String.raw`[A-Z][a-zA-Z'-]+`
+const AUTHOR_GROUP = String.raw`(${AUTHOR}(?:\s+et\s+al\.?|\s+(?:&|and)\s+${AUTHOR})?)`
+const YEAR = String.raw`((?:1[89]|20)\d{2}[a-z]?)`
 
-function extractInlineCitations(text: string): InlineOccurrence[] {
+// "Smith, 2020" / "Smith et al. 2020" / "Smith & Jones, 2020" — searched
+// inside parenthetical segments, so prefixes like "e.g.," are tolerated.
+const SEGMENT_RE = new RegExp(`${AUTHOR_GROUP},?\\s+${YEAR}`)
+// Narrative form: "Smith (2020)", "Smith et al. (2021)", "Smith and Jones (2019)"
+const NARRATIVE_RE = new RegExp(`${AUTHOR_GROUP}\\s+\\(${YEAR}\\)`, 'g')
+// Any parenthetical that contains a year — candidate citation group,
+// possibly holding several citations separated by ";"
+const PAREN_RE = /\(([^()]*\d{4}[^()]*)\)/g
+
+/** Normalize an author group: collapse whitespace, "and" → "&", "et al" → "et al." */
+function normalizeAuthors(raw: string): string {
+  return raw.replace(/\s+/g, ' ').replace(/\s+and\s+/, ' & ').replace(/\s+et\s+al\.?/, ' et al.').trim()
+}
+
+function firstSurname(authorGroup: string): string {
+  return authorGroup.split(/[\s,]/)[0]
+}
+
+function extractInlineCitations(bodyText: string): InlineOccurrence[] {
   const out: InlineOccurrence[] = []
-  for (const match of text.matchAll(INLINE_CITATION_RE)) {
-    const author = match[1].replace(/\s+et\s+al\.?/, ' et al.').trim()
-    const year = match[2]
-    out.push({ key: `${author}, ${year}`, author, year, verbatim: match[0] })
+  for (const paren of bodyText.matchAll(PAREN_RE)) {
+    for (const segment of paren[1].split(';')) {
+      const m = segment.match(SEGMENT_RE)
+      if (!m) continue
+      const authors = normalizeAuthors(m[1])
+      out.push({ key: `${authors}, ${m[2]}`, author: firstSurname(authors), year: m[2], verbatim: paren[0] })
+    }
+  }
+  for (const m of bodyText.matchAll(NARRATIVE_RE)) {
+    const authors = normalizeAuthors(m[1])
+    out.push({ key: `${authors}, ${m[2]}`, author: firstSurname(authors), year: m[2], verbatim: m[0] })
   }
   return out
 }
 
-// Try to parse bibliography section — look for a References/Bibliography heading
-function extractBibliographyEntries(text: string): { entries: string[]; errors: string[] } {
-  const errors: string[] = []
-  const refHeadingRe = /^#{1,3}\s*(References|Bibliography|Works Cited)\s*$/im
-  const match = text.match(refHeadingRe)
+// Locate the References/Bibliography heading. Works for markdown ("## References")
+// and for editor plain text, where headings carry no "#" prefix.
+const REF_HEADING_RE = /^#{0,3}\s*(References|Bibliography|Works Cited)\s*:?\s*$/im
 
-  if (!match || match.index === undefined) {
-    return { entries: [], errors: ['No References/Bibliography section found'] }
-  }
+/** Split the manuscript into body and reference-list text. */
+function splitAtBibliography(text: string): { body: string; bib: string | null } {
+  const match = text.match(REF_HEADING_RE)
+  if (!match || match.index === undefined) return { body: text, bib: null }
+  return { body: text.slice(0, match.index), bib: text.slice(match.index + match[0].length) }
+}
 
-  const bibText = text.slice(match.index + match[0].length)
-  // Split on blank lines or numbered entries
-  const rawEntries = bibText
-    .split(/\n(?=\d+\.|[-*]|\n)/)
-    .map(e => e.replace(/^\d+\.\s*|^[-*]\s*/, '').trim())
-    .filter(e => e.length > 20) // skip noise
-
-  return { entries: rawEntries, errors }
+// Each non-trivial line is treated as one entry: the editor emits one line per
+// paragraph, and pasted reference lists have their soft wraps joined on paste.
+function extractBibliographyEntries(bibText: string): string[] {
+  return bibText
+    .split('\n')
+    .map(line => line.replace(/^\s*(?:\d+\.|[-*])\s*/, '').trim())
+    .filter(line => line.length > 20)
 }
 
 // Count "Surname, X." author groups in the text preceding the year, so a
@@ -74,16 +108,19 @@ function countAuthors(preYearText: string): { count: number; first: string; seco
   const re = /([A-Z][a-zA-Z'-]+),\s*[A-Z]\.(?:\s*[A-Z]\.)?/g
   const surnames = [...preYearText.matchAll(re)].map(m => m[1])
   if (surnames.length === 0) {
+    // No "Surname, X." groups — e.g. an institutional author. Use the last
+    // word before the year, minus trailing punctuation.
     const words = preYearText.trim().split(/\s+/).filter(Boolean)
-    return { count: 1, first: words[words.length - 1] ?? preYearText.trim() }
+    const last = (words[words.length - 1] ?? preYearText.trim()).replace(/[.,;:]+$/, '')
+    return { count: 1, first: last }
   }
   return { count: surnames.length, first: surnames[0], second: surnames[1] }
 }
 
-// Extract Author-Year key from a bibliography entry
+// Extract the Author-Year key from a bibliography entry like
+// "Brown, T. (2020). Title..." or "Smith, J., Doe, A., & Lee, K. (2021)..."
 function parseBibEntryKey(entry: string): { key: string; author: string; year: string } | null {
-  // Look for "Author, A. (YYYY)" or "Author, A., & Other, B. (YYYY)"
-  const yearMatch = entry.match(/\((\d{4}[a-z]?)\)/)
+  const yearMatch = entry.match(/\(((?:1[89]|20)\d{2}[a-z]?)\)/)
   if (!yearMatch) return null
 
   const year = yearMatch[1]
@@ -100,10 +137,12 @@ function parseBibEntryKey(entry: string): { key: string; author: string; year: s
 }
 
 export function runRefCheck(manuscriptText: string): RefCheckResult {
-  const inlineOccurrences = extractInlineCitations(manuscriptText)
-  const { entries, errors } = extractBibliographyEntries(manuscriptText)
+  const { body, bib } = splitAtBibliography(manuscriptText)
+  const errors: string[] = bib === null ? ['No References/Bibliography section found'] : []
+  const inlineOccurrences = extractInlineCitations(body)
+  const entries = bib ? extractBibliographyEntries(bib) : []
 
-  const bibByKey = new Map<string, string[]>()       // key -> verbatim entries
+  const bibByKey = new Map<string, string[]>()          // key -> verbatim entries
   const bibAuthorYears = new Map<string, Set<string>>() // surname -> years listed
 
   for (const entry of entries) {
@@ -127,29 +166,16 @@ export function runRefCheck(manuscriptText: string): RefCheckResult {
     cited_not_listed.push({ key: occ.key, verbatim: occ.verbatim })
   }
 
-  // listed but never cited
-  const listed_not_cited: ListedNotCited[] = []
-  for (const [key, verbatimEntries] of bibByKey) {
-    if (citedKeys.has(key)) continue
-    for (const entry of verbatimEntries) listed_not_cited.push({ key, entry })
-  }
-
-  // duplicate bibliography entries for the same key
-  const duplicate_entries: DuplicateEntry[] = []
-  for (const [key, verbatimEntries] of bibByKey) {
-    if (verbatimEntries.length > 1) duplicate_entries.push({ key, entries: verbatimEntries })
-  }
-
   // year mismatches: same surname cited with a year that doesn't match any of
   // that surname's listed bibliography years
   const year_mismatches: YearMismatch[] = []
-  const seenMismatchAuthors = new Set<string>()
+  const mismatchAuthors = new Set<string>()
   for (const occ of inlineOccurrences) {
     const listedYears = bibAuthorYears.get(occ.author)
     if (!listedYears || listedYears.size === 0) continue // handled by cited_not_listed
     if (listedYears.has(occ.year)) continue
-    if (seenMismatchAuthors.has(occ.author)) continue
-    seenMismatchAuthors.add(occ.author)
+    if (mismatchAuthors.has(occ.author)) continue
+    mismatchAuthors.add(occ.author)
     const citedYears = inlineOccurrences.filter(o => o.author === occ.author).map(o => o.year)
     year_mismatches.push({
       author: occ.author,
@@ -157,6 +183,26 @@ export function runRefCheck(manuscriptText: string): RefCheckResult {
       listedYear: [...listedYears][0],
       verbatim: occ.verbatim,
     })
+  }
+
+  // listed but never cited — match on the first author + year so "Smith et
+  // al., 2021" in-text counts as citing the full "Smith, Doe & Lee (2021)"
+  // entry, and skip authors already reported as a year mismatch (that one
+  // finding covers both sides of the discrepancy).
+  const citedAuthorYears = new Set(inlineOccurrences.map(o => `${o.author}|${o.year}`))
+  const listed_not_cited: ListedNotCited[] = []
+  for (const [key, verbatimEntries] of bibByKey) {
+    if (citedKeys.has(key)) continue
+    const parsed = parseBibEntryKey(verbatimEntries[0])
+    if (parsed && citedAuthorYears.has(`${parsed.author}|${parsed.year}`)) continue
+    if (parsed && mismatchAuthors.has(parsed.author)) continue
+    for (const entry of verbatimEntries) listed_not_cited.push({ key, entry })
+  }
+
+  // duplicate bibliography entries for the same key
+  const duplicate_entries: DuplicateEntry[] = []
+  for (const [key, verbatimEntries] of bibByKey) {
+    if (verbatimEntries.length > 1) duplicate_entries.push({ key, entries: verbatimEntries })
   }
 
   return { cited_not_listed, listed_not_cited, duplicate_entries, year_mismatches, bibliography_parse_errors: errors }
