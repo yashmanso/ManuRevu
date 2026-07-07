@@ -24,6 +24,26 @@ export interface EndNoteLibraryConfig {
 
 export type VaultSourceConfig = LocalFolderConfig | ZoteroGroupConfig | MendeleyConfig | EndNoteLibraryConfig
 
+export type VaultSourceType = 'local_folder' | 'zotero_group' | 'mendeley_library' | 'endnote_library'
+
+export const VAULT_TYPE_LABELS: Record<VaultSourceType, string> = {
+  local_folder: 'Local folder',
+  zotero_group: 'Zotero group',
+  mendeley_library: 'Mendeley library',
+  endnote_library: 'EndNote library',
+}
+
+/** A vault_sources row. Shared by the settings store (server) and the UI. */
+export interface VaultSource {
+  id: string
+  type: VaultSourceType
+  name: string
+  config_json: string
+  item_count: number
+  last_synced_at: string | null
+  created_at: string
+}
+
 export interface VaultSyncResult {
   item_count: number
   errors: string[]

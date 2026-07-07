@@ -1,6 +1,9 @@
 import Database from 'better-sqlite3'
 import path from 'path'
 import fs from 'fs'
+import type { VaultSource } from './vault/types'
+
+export type { VaultSource, VaultSourceType } from './vault/types'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 const DB_PATH = path.join(DATA_DIR, 'sessions.db')
@@ -124,16 +127,6 @@ export function searchPdfIndex(authorFragment: string, year?: number): { file_pa
   const params: (string | number)[] = [`%${authorFragment}%`]
   if (year) params.push(year)
   return db.prepare(`SELECT file_path, title, text_excerpt FROM pdf_index WHERE authors LIKE ?${yearClause} LIMIT 5`).all(...params) as { file_path: string; title?: string; text_excerpt?: string }[]
-}
-
-export interface VaultSource {
-  id: string
-  type: 'local_folder' | 'zotero_group' | 'mendeley_library' | 'endnote_library'
-  name: string
-  config_json: string
-  item_count: number
-  last_synced_at: string | null
-  created_at: string
 }
 
 export function createVaultSource(entry: { id: string; type: VaultSource['type']; name: string; config: Record<string, unknown> }): void {

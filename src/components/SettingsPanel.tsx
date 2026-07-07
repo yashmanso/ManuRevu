@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
+import { pickFolder } from '@/lib/pick-folder'
+import ReferenceVaultSection from '@/components/settings/ReferenceVaultSection'
 
 interface Settings {
   citation_backend?: string
@@ -19,23 +21,10 @@ const MODEL_OPTIONS: { value: string; label: string }[] = [
   { value: 'meta-llama/llama-3.1-8b-instruct', label: 'Llama 3.1 8B ($0.06 / $0.06 per M)' },
 ]
 
-type VaultSourceType = 'local_folder' | 'zotero_group' | 'mendeley_library' | 'endnote_library'
-
-interface VaultSource {
-  id: string
-  type: VaultSourceType
-  name: string
-  config_json: string
-  item_count: number
-  last_synced_at: string | null
-}
-
-const VAULT_TYPE_LABELS: Record<VaultSourceType, string> = {
-  local_folder: 'Local folder',
-  zotero_group: 'Zotero group',
-  mendeley_library: 'Mendeley library',
-  endnote_library: 'EndNote library',
-}
+const inputCls = 'w-full border border-neutral-300 dark:border-neutral-600 rounded-md px-3 py-1.5 text-sm bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-900 dark:focus:ring-neutral-300'
+const labelCls = 'block text-xs text-neutral-600 dark:text-neutral-400 mb-1'
+const headingCls = 'text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-3'
+const hintCls = 'text-xs text-neutral-400 dark:text-neutral-500 mt-1'
 
 interface SettingsPanelProps {
   onClose: () => void
@@ -50,79 +39,9 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [cacheCleared, setCacheCleared] = useState<number | null>(null)
   const [clearingCache, setClearingCache] = useState(false)
 
-  const [vaultSources, setVaultSources] = useState<VaultSource[]>([])
-  const [syncingId, setSyncingId] = useState<string | null>(null)
-  const [newSourceType, setNewSourceType] = useState<VaultSourceType>('local_folder')
-  const [newSourceName, setNewSourceName] = useState('')
-  const [newFolderPath, setNewFolderPath] = useState('')
-  const [newGroupId, setNewGroupId] = useState('')
-  const [newApiKey, setNewApiKey] = useState('')
-  const [addingSource, setAddingSource] = useState(false)
-
-  const loadVaultSources = () => {
-    fetch('/api/vault/sources').then(r => r.json()).then(setVaultSources).catch(console.error)
-  }
-
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(setSettings).catch(console.error)
-    loadVaultSources()
   }, [])
-
-  const addVaultSource = async () => {
-    if (!newSourceName.trim()) return
-    setAddingSource(true)
-    try {
-      const body = newSourceType === 'zotero_group'
-        ? { type: 'zotero_group', name: newSourceName, group_id: newGroupId, api_key: newApiKey }
-        : { type: newSourceType, name: newSourceName, folder_path: newFolderPath }
-      const res = await fetch('/api/vault/sources', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (res.ok) {
-        setNewSourceName(''); setNewFolderPath(''); setNewGroupId(''); setNewApiKey('')
-        loadVaultSources()
-      }
-    } finally {
-      setAddingSource(false)
-    }
-  }
-
-  const syncVaultSource = async (id: string) => {
-    setSyncingId(id)
-    try {
-      await fetch(`/api/vault/sources/${id}/sync`, { method: 'POST' })
-      loadVaultSources()
-    } finally {
-      setSyncingId(null)
-    }
-  }
-
-  const pickFolder = async (): Promise<string | null> => {
-    try {
-      const res = await fetch('/api/folder-picker', { method: 'POST' })
-      const data = await res.json() as { path?: string; error?: string }
-      return data.path ?? null
-    } catch {
-      return null
-    }
-  }
-
-  const browseFolderPath = async () => {
-    const path = await pickFolder()
-    if (path) setNewFolderPath(path)
-  }
-
-  const browseWatchedFolder = async () => {
-    const path = await pickFolder()
-    if (path) setSettings(s => ({ ...s, pdf_watch_folder: path }))
-  }
-
-  const removeVaultSource = async (id: string) => {
-    await fetch(`/api/vault/sources/${id}`, { method: 'DELETE' })
-    loadVaultSources()
-  }
 
   const save = async () => {
     setSaving(true)
@@ -147,6 +66,11 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     } finally {
       setReindexing(false)
     }
+  }
+
+  const browseWatchedFolder = async () => {
+    const path = await pickFolder()
+    if (path) setSettings(s => ({ ...s, pdf_watch_folder: path }))
   }
 
   const uploadPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,41 +102,41 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-neutral-800">Settings</h2>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 text-xl leading-none">×</button>
+          <h2 className="text-lg font-semibold text-neutral-800 dark:text-neutral-100">Settings</h2>
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 text-xl leading-none">×</button>
         </div>
 
         {/* Model tier overrides */}
         <section className="mb-6">
-          <h3 className="text-sm font-medium text-neutral-700 mb-3">Models</h3>
+          <h3 className={headingCls}>Models</h3>
           <div className="mb-3">
-            <label className="block text-xs text-neutral-600 mb-1">Structural model (fast checks)</label>
+            <label className={labelCls}>Structural model (fast checks)</label>
             <select
               value={settings.structural_model ?? 'google/gemini-flash-1.5'}
               onChange={e => setSettings(s => ({ ...s, structural_model: e.target.value }))}
-              className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
+              className={inputCls}
             >
               {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-neutral-600 mb-1">Writing model (deep review)</label>
+            <label className={labelCls}>Writing model (deep review)</label>
             <select
               value={settings.writing_model ?? 'google/gemini-pro-1.5'}
               onChange={e => setSettings(s => ({ ...s, writing_model: e.target.value }))}
-              className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
+              className={inputCls}
             >
               {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-          <p className="text-xs text-neutral-400 mt-1">Prices shown as input / output per million tokens. Skill-level overrides still take precedence.</p>
+          <p className={hintCls}>Prices shown as input / output per million tokens. Skill-level overrides still take precedence.</p>
         </section>
 
         {/* Citation backend */}
         <section className="mb-6">
-          <h3 className="text-sm font-medium text-neutral-700 mb-3">Citation Grounding Backend</h3>
+          <h3 className={headingCls}>Citation Grounding Backend</h3>
           <div className="flex gap-2 mb-3">
             {(['semantic_scholar', 'scite'] as const).map(b => (
               <button
@@ -220,8 +144,8 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                 onClick={() => setSettings(s => ({ ...s, citation_backend: b }))}
                 className={`px-3 py-1.5 rounded-md text-sm border transition-colors ${
                   (settings.citation_backend ?? 'semantic_scholar') === b
-                    ? 'bg-neutral-900 text-white border-neutral-900'
-                    : 'bg-white text-neutral-600 border-neutral-300 hover:border-neutral-500'
+                    ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-neutral-100 dark:text-neutral-900 dark:border-neutral-100'
+                    : 'bg-white text-neutral-600 border-neutral-300 hover:border-neutral-500 dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-600 dark:hover:border-neutral-400'
                 }`}
               >
                 {b === 'semantic_scholar' ? 'Semantic Scholar + Unpaywall' : 'scite.ai'}
@@ -229,36 +153,36 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
             ))}
           </div>
           {(settings.citation_backend ?? 'semantic_scholar') === 'semantic_scholar' && (
-            <p className="text-xs text-neutral-500">Uses the free Semantic Scholar API. OA full-text fetched via Unpaywall where available.</p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">Uses the free Semantic Scholar API. OA full-text fetched via Unpaywall where available.</p>
           )}
           {settings.citation_backend === 'scite' && (
             <div className="mt-2">
-              <label className="block text-xs text-neutral-600 mb-1">scite.ai API Key</label>
+              <label className={labelCls}>scite.ai API Key</label>
               <input
                 type="password"
                 placeholder="sk-scite-…"
                 value={settings.scite_api_key ?? ''}
                 onChange={e => setSettings(s => ({ ...s, scite_api_key: e.target.value }))}
-                className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                className={`${inputCls} font-mono`}
               />
-              <p className="text-xs text-neutral-400 mt-1">Key is stored locally in SQLite only, never sent anywhere except scite.ai.</p>
+              <p className={hintCls}>Key is stored locally in SQLite only, never sent anywhere except scite.ai.</p>
             </div>
           )}
         </section>
 
         {/* PDF sources */}
         <section className="mb-6">
-          <h3 className="text-sm font-medium text-neutral-700 mb-3">Local PDF Library</h3>
+          <h3 className={headingCls}>Local PDF Library</h3>
 
           <div className="mb-3">
-            <label className="block text-xs text-neutral-600 mb-1">Watched Folder Path</label>
+            <label className={labelCls}>Watched Folder Path</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 placeholder="/Users/you/Zotero/storage or ~/Papers"
                 value={settings.pdf_watch_folder ?? ''}
                 onChange={e => setSettings(s => ({ ...s, pdf_watch_folder: e.target.value }))}
-                className="flex-1 border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                className={`${inputCls} flex-1 font-mono`}
               />
               <Button size="sm" variant="outline" onClick={browseWatchedFolder}>
                 Browse
@@ -268,137 +192,31 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               </Button>
             </div>
             {reindexCount !== null && (
-              <p className="text-xs text-green-600 mt-1">Indexed {reindexCount} PDF{reindexCount !== 1 ? 's' : ''}</p>
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">Indexed {reindexCount} PDF{reindexCount !== 1 ? 's' : ''}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-xs text-neutral-600 mb-1">Upload individual PDFs</label>
-            <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 border border-neutral-300 rounded-md text-sm text-neutral-600 hover:border-neutral-500 transition-colors">
+            <label className={labelCls}>Upload individual PDFs</label>
+            <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm text-neutral-600 dark:text-neutral-300 hover:border-neutral-500 dark:hover:border-neutral-400 transition-colors">
               <span>Choose PDF…</span>
               <input type="file" accept=".pdf" className="hidden" onChange={uploadPdf} />
             </label>
-            {uploadStatus && <span className="ml-2 text-xs text-neutral-500">{uploadStatus}</span>}
+            {uploadStatus && <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">{uploadStatus}</span>}
           </div>
         </section>
 
-        {/* Reference Vault — multiple named PDF sources, including reference-manager groups */}
-        <section className="mb-6">
-          <h3 className="text-sm font-medium text-neutral-700 mb-3">Reference Vault</h3>
-          <p className="text-xs text-neutral-400 mb-3">
-            Sources of source PDFs used by Citation–Claim verification. Add a local folder, or connect a Zotero, Mendeley, or EndNote library.
-          </p>
-
-          {vaultSources.length > 0 && (
-            <div className="space-y-2 mb-3">
-              {vaultSources.map(s => (
-                <div key={s.id} className="flex items-center justify-between border border-neutral-200 rounded-md px-3 py-2">
-                  <div>
-                    <p className="text-sm text-neutral-800">{s.name}</p>
-                    <p className="text-xs text-neutral-400">
-                      {VAULT_TYPE_LABELS[s.type]} · {s.item_count} PDF{s.item_count !== 1 ? 's' : ''}
-                      {s.last_synced_at ? ` · synced ${new Date(s.last_synced_at).toLocaleString()}` : ' · never synced'}
-                    </p>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <Button size="sm" variant="outline" onClick={() => syncVaultSource(s.id)} disabled={syncingId === s.id}>
-                      {syncingId === s.id ? 'Syncing…' : 'Sync'}
-                    </Button>
-                    <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => removeVaultSource(s.id)}>
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="border border-neutral-200 rounded-md p-3">
-            <div className="flex gap-2 mb-2 flex-wrap">
-              {(['local_folder', 'zotero_group', 'mendeley_library', 'endnote_library'] as const).map(t => (
-                <button
-                  key={t}
-                  onClick={() => setNewSourceType(t)}
-                  className={`px-3 py-1.5 rounded-md text-xs border transition-colors ${
-                    newSourceType === t
-                      ? 'bg-neutral-900 text-white border-neutral-900'
-                      : 'bg-white text-neutral-600 border-neutral-300 hover:border-neutral-500'
-                  }`}
-                >
-                  {VAULT_TYPE_LABELS[t]}
-                </button>
-              ))}
-            </div>
-            <input
-              type="text"
-              placeholder="Source name"
-              value={newSourceName}
-              onChange={e => setNewSourceName(e.target.value)}
-              className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-            />
-            {newSourceType !== 'zotero_group' && (
-              <>
-                <div className="flex gap-2 mb-2">
-                  <input
-                    type="text"
-                    placeholder={
-                      newSourceType === 'endnote_library' ? '/Users/you/MyLibrary.Data/PDF'
-                      : newSourceType === 'mendeley_library' ? '/Users/you/.local/share/Mendeley Ltd./Mendeley Desktop/Downloaded'
-                      : '/Users/you/Papers'
-                    }
-                    value={newFolderPath}
-                    onChange={e => setNewFolderPath(e.target.value)}
-                    className="flex-1 border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                  />
-                  <Button size="sm" variant="outline" onClick={browseFolderPath} className="shrink-0">
-                    Browse
-                  </Button>
-                </div>
-                {newSourceType === 'endnote_library' && (
-                  <p className="text-xs text-neutral-400 mb-2">
-                    EndNote has no sync API — point this at the &ldquo;&lt;Library&gt;.Data/PDF&rdquo; folder next to your .enl file, where EndNote stores attached PDFs.
-                  </p>
-                )}
-                {newSourceType === 'mendeley_library' && (
-                  <p className="text-xs text-neutral-400 mb-2">
-                    Mendeley&rsquo;s sync API requires a full OAuth2 login flow, so this points at the folder Mendeley Desktop already downloads attached PDFs into on disk.
-                  </p>
-                )}
-              </>
-            )}
-            {newSourceType === 'zotero_group' && (
-              <>
-                <input
-                  type="text"
-                  placeholder="Zotero group ID"
-                  value={newGroupId}
-                  onChange={e => setNewGroupId(e.target.value)}
-                  className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                />
-                <input
-                  type="password"
-                  placeholder="Zotero API key"
-                  value={newApiKey}
-                  onChange={e => setNewApiKey(e.target.value)}
-                  className="w-full border border-neutral-300 rounded-md px-3 py-1.5 text-sm font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                />
-              </>
-            )}
-            <Button size="sm" onClick={addVaultSource} disabled={addingSource || !newSourceName.trim()}>
-              {addingSource ? 'Adding…' : 'Add source'}
-            </Button>
-          </div>
-        </section>
+        <ReferenceVaultSection />
 
         {/* Cache management */}
         <section className="mb-6">
-          <h3 className="text-sm font-medium text-neutral-700 mb-3">Cache</h3>
+          <h3 className={headingCls}>Cache</h3>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={clearCache} disabled={clearingCache}>
               {clearingCache ? 'Clearing…' : 'Clear citation cache'}
             </Button>
             {cacheCleared !== null && (
-              <span className="text-xs text-green-600">Cleared {cacheCleared} entr{cacheCleared === 1 ? 'y' : 'ies'}</span>
+              <span className="text-xs text-green-600 dark:text-green-400">Cleared {cacheCleared} entr{cacheCleared === 1 ? 'y' : 'ies'}</span>
             )}
           </div>
         </section>
