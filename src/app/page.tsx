@@ -339,25 +339,35 @@ export default function Home() {
   }, [])
 
   // ── Slash menu ──────────────────────────────────────────────────────────────
+  // Notion-style: "/" typed in the editor opens the menu (the character is
+  // inserted as usual), further typing filters, and runSkill removes the
+  // "/query" text on select. Everything the menu consumes must have landed in
+  // the editor, so the deletion count in runSkill stays exact.
   useEffect(() => {
+    const inEditor = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest('.ProseMirror')
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === '/' && !slashMenu.open) {
+      if (!slashMenu.open) {
+        if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || !inEditor(e.target)) return
         let top = window.innerHeight / 2 - 160
         let left = window.innerWidth / 2 - 160
-        // Try to position relative to cursor
         const sel = window.getSelection()
-        if (sel && sel.rangeCount > 0) {
-          const range = sel.getRangeAt(0)
-          const rect = range.getBoundingClientRect()
+        const rect = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).getBoundingClientRect() : null
+        if (rect && (rect.top || rect.left)) {
           const menuHeight = 320
           const spaceBelow = window.innerHeight - rect.bottom
           top = spaceBelow < menuHeight + 16 ? Math.max(8, rect.top - menuHeight - 8) : rect.bottom + 8
           left = Math.min(rect.left, window.innerWidth - 320 - 16)
         }
         setSlashMenu({ open: true, position: { top, left }, query: '' })
-      } else if (slashMenu.open) {
-        if (e.key === 'Backspace') setSlashMenu(m => ({ ...m, query: m.query.slice(0, -1) }))
-        else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) setSlashMenu(m => ({ ...m, query: m.query + e.key }))
+        return
+      }
+      // Focus left the editor — the typed-text bookkeeping no longer holds
+      if (!inEditor(e.target)) { setSlashMenu(m => ({ ...m, open: false })); return }
+      if (e.key === 'Backspace') {
+        // Backspacing past the "/" dismisses the menu (the editor deletes the "/")
+        setSlashMenu(m => m.query ? { ...m, query: m.query.slice(0, -1) } : { ...m, open: false })
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        setSlashMenu(m => ({ ...m, query: m.query + e.key }))
       }
     }
     window.addEventListener('keydown', handleKeyDown)
