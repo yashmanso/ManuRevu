@@ -2,24 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
-
-const SKILL_META: Record<string, { label: string; color: string; bg: string }> = {
-  'article-usage':        { label: 'Article Usage',        color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
-  'long-sentence':        { label: 'Long Sentences',       color: '#a855f7', bg: 'rgba(168,85,247,0.1)' },
-  'verb-simplification':  { label: 'Verb Simplification',  color: '#06b6d4', bg: 'rgba(6,182,212,0.1)' },
-  'word-choice':          { label: 'Word Choice',          color: '#14b8a6', bg: 'rgba(20,184,166,0.1)' },
-  'clarity-check':        { label: 'Clarity Check',        color: '#f97316', bg: 'rgba(249,115,22,0.1)' },
-  'structure-flow':       { label: 'Structure & Flow',     color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
-  'argument-consistency': { label: 'Argument Consistency', color: '#ec4899', bg: 'rgba(236,72,153,0.1)' },
-  'citation-claim':       { label: 'Citation–Claim',       color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
-  'convoluted-ambiguous': { label: 'Convoluted/Ambiguous', color: '#f43f5e', bg: 'rgba(244,63,94,0.1)' },
-  'repetition-detector':  { label: 'Repetition',           color: '#84cc16', bg: 'rgba(132,204,22,0.1)' },
-  'reference-consistency': { label: 'Reference Consistency', color: '#d97706', bg: 'rgba(217,119,6,0.1)' },
-}
-
-function getMeta(skillId: string) {
-  return SKILL_META[skillId] ?? { label: skillId, color: '#6b7280', bg: 'rgba(107,114,128,0.1)' }
-}
+import { getSkillMeta, skillTint } from '@/lib/skill-meta'
 
 interface AnnotationPopoverProps {
   message: string
@@ -45,7 +28,7 @@ export default function AnnotationPopover({
   anchorRect, onAccept, onReject, onJump, onSave, onClose,
   onMouseEnter, onMouseLeave,
 }: AnnotationPopoverProps) {
-  const meta = getMeta(skillId)
+  const meta = getSkillMeta(skillId)
   const ref = useRef<HTMLDivElement>(null)
   const canApply = !!match && replacement !== undefined
 
@@ -94,7 +77,7 @@ export default function AnnotationPopover({
       {/* Skill label */}
       <div
         className="flex items-center gap-2 px-3 py-2 border-b border-neutral-100 dark:border-neutral-700"
-        style={{ background: meta.bg }}
+        style={{ background: skillTint(skillId) }}
       >
         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: meta.color }} />
         <span className="text-xs font-semibold" style={{ color: meta.color }}>{meta.label}</span>

@@ -4,24 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import type { Suggestion, Annotation, SidePanelItem } from '@/lib/suggestion-types'
-
-const SKILL_COLORS: Record<string, { bg: string; border: string; accent: string; label: string }> = {
-  'article-usage':        { bg: 'bg-blue-50',   border: 'border-blue-200',   accent: 'bg-blue-500',   label: 'bg-blue-100 text-blue-700' },
-  'long-sentence':        { bg: 'bg-purple-50', border: 'border-purple-200', accent: 'bg-purple-500', label: 'bg-purple-100 text-purple-700' },
-  'verb-simplification':  { bg: 'bg-cyan-50',   border: 'border-cyan-200',   accent: 'bg-cyan-500',   label: 'bg-cyan-100 text-cyan-700' },
-  'word-choice':          { bg: 'bg-teal-50',   border: 'border-teal-200',   accent: 'bg-teal-500',   label: 'bg-teal-100 text-teal-700' },
-  'clarity-check':        { bg: 'bg-orange-50', border: 'border-orange-200', accent: 'bg-orange-500', label: 'bg-orange-100 text-orange-700' },
-  'structure-flow':       { bg: 'bg-red-50',    border: 'border-red-200',    accent: 'bg-red-500',    label: 'bg-red-100 text-red-700' },
-  'argument-consistency': { bg: 'bg-pink-50',   border: 'border-pink-200',   accent: 'bg-pink-500',   label: 'bg-pink-100 text-pink-700' },
-  'citation-claim':       { bg: 'bg-indigo-50', border: 'border-indigo-200', accent: 'bg-indigo-500', label: 'bg-indigo-100 text-indigo-700' },
-  'convoluted-ambiguous': { bg: 'bg-rose-50',   border: 'border-rose-200',   accent: 'bg-rose-500',   label: 'bg-rose-100 text-rose-700' },
-  'repetition-detector':  { bg: 'bg-lime-50',   border: 'border-lime-200',   accent: 'bg-lime-500',   label: 'bg-lime-100 text-lime-700' },
-  'reference-consistency': { bg: 'bg-amber-50', border: 'border-amber-200', accent: 'bg-amber-500', label: 'bg-amber-100 text-amber-700' },
-}
-
-function getColor(skillId: string) {
-  return SKILL_COLORS[skillId] ?? { bg: 'bg-neutral-50', border: 'border-neutral-200', accent: 'bg-neutral-400', label: 'bg-neutral-100 text-neutral-600' }
-}
+import { getSkillMeta } from '@/lib/skill-meta'
 
 interface ReviewSidebarProps {
   suggestions: Suggestion[]
@@ -125,9 +108,8 @@ function SkillGroup({ skillId, items, defaultOpen = true, activeId, onAccept, on
   defaultOpen?: boolean
 } & Pick<ReviewSidebarProps, 'activeId' | 'onAccept' | 'onReject' | 'onJumpTo' | 'onSaveToKnowledge'>) {
   const [open, setOpen] = useState(defaultOpen)
-  const colors = getColor(skillId)
+  const { label, sidebar: colors } = getSkillMeta(skillId)
   const pending = items.filter(s => s.verdict === 'pending').length
-  const label = skillId.replace(/-/g, ' ')
 
   return (
     <div className={`rounded-lg border overflow-hidden ${colors.border}`}>
@@ -137,7 +119,7 @@ function SkillGroup({ skillId, items, defaultOpen = true, activeId, onAccept, on
       >
         <div className="flex items-center gap-2">
           <span className={`inline-block w-2 h-2 rounded-full ${colors.accent}`} />
-          <span className={`text-xs font-semibold capitalize ${colors.label.split(' ')[1]}`}>{label}</span>
+          <span className={`text-xs font-semibold ${colors.label.split(' ')[1]}`}>{label}</span>
         </div>
         <div className="flex items-center gap-2">
           {pending > 0 && (

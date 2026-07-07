@@ -23,44 +23,16 @@ import { splitSections } from '@/lib/sections'
 import SettingsPanel from '@/components/SettingsPanel'
 import { runLocalSkill } from '@/lib/local-skills/index'
 import AnnotationPopover from '@/components/AnnotationPopover'
+import { isLocalSkill, skillHighlight, type SkillInfo } from '@/lib/skill-meta'
 
 // Editor uses browser APIs — load client-side only
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false })
 
-interface Skill {
-  id: string
-  name: string
-  description: string
-  tier: 'structural' | 'writing'
-  scope: 'full' | 'selection' | 'section'
-  output: 'diff' | 'annotation' | 'sidepanel'
-  local?: boolean
-}
+type Skill = SkillInfo
 
 type RunStatus = 'idle' | 'running'
 type SaveState = 'idle' | 'saving' | 'saved'
 type SidebarTab = 'review' | 'history' | 'knowledge' | 'versions'
-
-// Skills that always run locally regardless of server flag
-const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-choice', 'article-usage', 'reference-consistency'])
-
-// Inline highlight colors per skill — more opaque so they're visible while scrolling
-const SKILL_HIGHLIGHT: Record<string, string> = {
-  'article-usage':        'rgba(59,130,246,0.40)',
-  'long-sentence':        'rgba(168,85,247,0.38)',
-  'verb-simplification':  'rgba(6,182,212,0.38)',
-  'word-choice':          'rgba(20,184,166,0.38)',
-  'clarity-check':        'rgba(249,115,22,0.38)',
-  'structure-flow':       'rgba(239,68,68,0.38)',
-  'argument-consistency': 'rgba(236,72,153,0.38)',
-  'citation-claim':       'rgba(99,102,241,0.38)',
-  'convoluted-ambiguous': 'rgba(244,63,94,0.38)',
-  'repetition-detector':  'rgba(132,204,22,0.38)',
-  'reference-consistency': 'rgba(217,119,6,0.38)',
-}
-function highlightColor(skillId: string): string {
-  return SKILL_HIGHLIGHT[skillId] ?? 'rgba(245,158,11,0.30)'
-}
 
 let idCounter = 0
 function genId(): string {
@@ -419,7 +391,7 @@ export default function Home() {
   useEffect(() => {
     const spans = suggestions
       .filter((s): s is Annotation => s.type === 'annotation' && s.verdict === 'pending' && !!s.match)
-      .map(s => ({ id: s.id, match: s.match as string, color: highlightColor(s.skillId), active: s.id === activeSuggestionId }))
+      .map(s => ({ id: s.id, match: s.match as string, color: skillHighlight(s.skillId), active: s.id === activeSuggestionId }))
     editorRef.current?.setHighlights(spans)
   }, [suggestions, activeSuggestionId])
 
@@ -549,7 +521,7 @@ export default function Home() {
     setActionsMenu(m => ({ ...m, open: false }))
     if (viaSlash) editorRef.current?.deleteBeforeCursor(1 + queryLen)
 
-    if (skill.local || LOCAL_SKILL_IDS.has(skill.id)) {
+    if (isLocalSkill(skill)) {
       const plainText = editorRef.current?.getPlainText() ?? ''
       if (!plainText.trim()) { toast.warning('Editor is empty.'); return }
       const versionId = await saveAutoVersion(`Before ${skill.name}`)

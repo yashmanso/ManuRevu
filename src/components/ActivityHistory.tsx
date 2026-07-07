@@ -1,18 +1,6 @@
 'use client'
 
-const SKILL_LABELS: Record<string, string> = {
-  'article-usage': 'Article Usage',
-  'long-sentence': 'Long Sentences',
-  'verb-simplification': 'Verb Simplification',
-  'word-choice': 'Word Choice',
-  'clarity-check': 'Clarity Check',
-  'structure-flow': 'Structure & Flow',
-  'argument-consistency': 'Argument Consistency',
-  'citation-claim': 'Citation–Claim',
-  'convoluted-ambiguous': 'Convoluted/Ambiguous',
-  'repetition-detector': 'Repetition',
-  'reference-consistency': 'Reference Consistency',
-}
+import { skillLabel } from '@/lib/skill-meta'
 
 export interface ActivityEntry {
   id: string
@@ -66,7 +54,7 @@ export default function ActivityHistory({ entries, onJumpToText, onJumpToVersion
     <div className="flex flex-col p-3 gap-0.5">
       {[...entries].reverse().map(entry => {
         const s = TYPE_STYLE[entry.type]
-        const skillLabel = entry.skillId ? (SKILL_LABELS[entry.skillId] ?? entry.skillId) : undefined
+        const entrySkillLabel = entry.skillId ? skillLabel(entry.skillId) : undefined
         const isClickable = canJump(entry) || canVersion(entry)
         return (
           <button
@@ -83,8 +71,8 @@ export default function ActivityHistory({ entries, onJumpToText, onJumpToVersion
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className={`text-xs font-semibold ${s.text}`}>{TYPE_LABEL[entry.type]}</span>
-                {skillLabel ? (
-                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${s.badge}`}>{skillLabel}</span>
+                {entrySkillLabel ? (
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${s.badge}`}>{entrySkillLabel}</span>
                 ) : entry.label ? (
                   <span className="text-xs text-neutral-600 dark:text-neutral-300">{entry.label}</span>
                 ) : null}

@@ -2,19 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
-
-const SKILL_LABELS: Record<string, string> = {
-  'article-usage': 'Article Usage',
-  'long-sentence': 'Long Sentences',
-  'verb-simplification': 'Verb Simplification',
-  'word-choice': 'Word Choice',
-  'clarity-check': 'Clarity Check',
-  'structure-flow': 'Structure & Flow',
-  'argument-consistency': 'Argument Consistency',
-  'citation-claim': 'Citation–Claim',
-  'convoluted-ambiguous': 'Convoluted/Ambiguous',
-  'repetition-detector': 'Repetition',
-}
+import { skillLabel } from '@/lib/skill-meta'
 
 export interface KnowledgeEntry {
   id: string
@@ -60,7 +48,7 @@ export default function KnowledgeRepo({ refreshKey }: KnowledgeRepoProps) {
         e.original_text.toLowerCase().includes(query.toLowerCase()) ||
         e.suggestion.toLowerCase().includes(query.toLowerCase()) ||
         (e.note ?? '').toLowerCase().includes(query.toLowerCase()) ||
-        (SKILL_LABELS[e.skill_id] ?? e.skill_id).toLowerCase().includes(query.toLowerCase())
+        skillLabel(e.skill_id).toLowerCase().includes(query.toLowerCase())
       )
     : entries
 
@@ -93,7 +81,7 @@ export default function KnowledgeRepo({ refreshKey }: KnowledgeRepoProps) {
                 <div className="px-3 py-2.5 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
-                      {SKILL_LABELS[entry.skill_id] ?? entry.skill_id}
+                      {skillLabel(entry.skill_id)}
                     </span>
                     <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">{formatDate(entry.created_at)}</span>
                   </div>
