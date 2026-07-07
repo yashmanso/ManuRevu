@@ -336,7 +336,7 @@ export default function Home() {
         setSaveState('idle')
       }
     }, 2000)
-  }, [])
+  }, [addActivity])
 
   // ── Slash menu ──────────────────────────────────────────────────────────────
   // Notion-style: "/" typed in the editor opens the menu (the character is
@@ -675,8 +675,7 @@ export default function Home() {
 
   const handleJumpToVersion = useCallback((versionId: string) => {
     setSidebarTab('versions')
-    // The VersionsPanel will highlight this version when it loads
-    toast.info('Switched to Versions tab', { description: `Find version from when this skill was run.` })
+    toast.info('Switched to Versions tab', { description: `Look for snapshot ${versionId.slice(0, 8)}… from this run.` })
   }, [])
 
   // ── Tab badges ───────────────────────────────────────────────────────────────
@@ -695,6 +694,9 @@ export default function Home() {
   ]
 
   const activeProject = projects.find(p => p.id === activeProjectId)
+
+  const popoverTarget = popover ? suggestions.find(sg => sg.id === popover.id) : undefined
+  const popoverSuggestion = popoverTarget?.type === 'annotation' && popoverTarget.verdict === 'pending' ? popoverTarget : undefined
 
   return (
     <div className="flex flex-col h-screen bg-neutral-50 dark:bg-neutral-950 overflow-hidden">
@@ -871,28 +873,24 @@ export default function Home() {
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
 
       {/* Hover / click popover on inline highlights */}
-      {popover && (() => {
-        const s = suggestions.find(sg => sg.id === popover.id)
-        if (!s || s.type !== 'annotation' || s.verdict !== 'pending') return null
-        return (
-          <AnnotationPopover
-            key={popover.id}
-            message={s.message ?? ''}
-            match={s.match}
-            replacement={s.replacement}
-            suggestion={s.suggestion}
-            skillId={s.skillId}
-            anchorRect={popover.rect}
-            onAccept={() => handleAccept(popover.id)}
-            onReject={() => handleReject(popover.id)}
-            onJump={() => handleJumpTo(popover.id)}
-            onSave={s.match || s.suggestion ? () => handleSaveToKnowledge(popover.id) : undefined}
-            onClose={() => setPopover(null)}
-            onMouseEnter={handlePopoverEnter}
-            onMouseLeave={handlePopoverLeave}
-          />
-        )
-      })()}
+      {popover && popoverSuggestion && (
+        <AnnotationPopover
+          key={popover.id}
+          message={popoverSuggestion.message ?? ''}
+          match={popoverSuggestion.match}
+          replacement={popoverSuggestion.replacement}
+          suggestion={popoverSuggestion.suggestion}
+          skillId={popoverSuggestion.skillId}
+          anchorRect={popover.rect}
+          onAccept={() => handleAccept(popover.id)}
+          onReject={() => handleReject(popover.id)}
+          onJump={() => handleJumpTo(popover.id)}
+          onSave={popoverSuggestion.match || popoverSuggestion.suggestion ? () => handleSaveToKnowledge(popover.id) : undefined}
+          onClose={() => setPopover(null)}
+          onMouseEnter={handlePopoverEnter}
+          onMouseLeave={handlePopoverLeave}
+        />
+      )}
     </div>
   )
 }

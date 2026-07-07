@@ -27,8 +27,9 @@ export default function KnowledgeRepo({ refreshKey }: KnowledgeRepoProps) {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
 
+  // No setLoading(true) here: `loading` starts true for the first fetch, and
+  // on refreshes the existing list stays visible instead of flashing a spinner.
   const load = useCallback(() => {
-    setLoading(true)
     fetch('/api/knowledge')
       .then(r => r.json())
       .then(setEntries)

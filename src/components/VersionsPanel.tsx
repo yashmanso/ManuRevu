@@ -24,16 +24,26 @@ function formatDateTime(iso: string): string {
 
 export default function VersionsPanel({ projectId, refreshKey, onSaveVersion, onRestoreVersion }: VersionsPanelProps) {
   const [versions, setVersions] = useState<VersionMeta[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [labelDraft, setLabelDraft] = useState('')
   const [viewingId, setViewingId] = useState<string | null>(null)
   const [viewingContent, setViewingContent] = useState<string | null>(null)
   const [restoring, setRestoring] = useState(false)
 
+  // Reset when the project changes so the previous project's versions don't
+  // linger while the new list loads (render-time prop comparison, per React docs)
+  const [prevProjectId, setPrevProjectId] = useState(projectId)
+  if (projectId !== prevProjectId) {
+    setPrevProjectId(projectId)
+    setVersions([])
+    setLoading(true)
+  }
+
+  // No setLoading(true) inside: on same-project refreshes the existing list
+  // stays visible instead of flashing a spinner.
   const load = useCallback(() => {
     if (!projectId) return
-    setLoading(true)
     fetch(`/api/manuscripts/${projectId}/versions`)
       .then(r => r.json())
       .then(setVersions)

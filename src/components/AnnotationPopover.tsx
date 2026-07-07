@@ -34,7 +34,6 @@ export default function AnnotationPopover({
 
   // Position: prefer above; fall back to below
   const spaceAbove = anchorRect.top - POPOVER_OFFSET
-  const spaceBelow = window.innerHeight - anchorRect.bottom - POPOVER_OFFSET
 
   let top: number
   let showAbove: boolean
