@@ -9,6 +9,8 @@ export interface InlineDiff {
   rationale?: string
   verdict: SuggestionVerdict
   model: string
+  /** Server-side skill_runs id, when the suggestion came from an LLM run. */
+  runId?: string
   tokens: number
   cost_usd: number
   latency_ms: number
@@ -27,6 +29,8 @@ export interface Annotation {
   suggestion?: string
   verdict: SuggestionVerdict
   model: string
+  /** Server-side skill_runs id, when the suggestion came from an LLM run. */
+  runId?: string
   tokens: number
   cost_usd: number
   latency_ms: number
@@ -40,6 +44,8 @@ export interface SidePanelItem {
   content: unknown      // parsed JSON from skill
   verdict: SuggestionVerdict
   model: string
+  /** Server-side skill_runs id, when the suggestion came from an LLM run. */
+  runId?: string
   tokens: number
   cost_usd: number
   latency_ms: number

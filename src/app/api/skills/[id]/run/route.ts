@@ -4,23 +4,24 @@ import { loadSkill } from '@/lib/skills'
 import { runLLM } from '@/lib/llm'
 import { resolveCitation } from '@/lib/citations'
 import { getSetting } from '@/lib/settings-store'
+import { apiHandler, readJson } from '@/lib/api-handler'
 
 const RequestSchema = z.object({
   manuscript: z.string().min(1),
   selection: z.string().optional(),
 })
 
-export async function POST(
+export const POST = apiHandler(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const { id } = await params
   const skill = loadSkill(id)
   if (!skill) {
     return NextResponse.json({ error: `Skill '${id}' not found` }, { status: 404 })
   }
 
-  const body = await req.json()
+  const body = await readJson(req)
   const parsed = RequestSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.message }, { status: 400 })
@@ -121,4 +122,4 @@ export async function POST(
     latency_ms: Date.now() - startTime,
     model: modelOverride ?? (skill.tier === 'structural' ? 'google/gemini-flash-1.5' : 'google/gemini-pro-1.5'),
   })
-}
+})

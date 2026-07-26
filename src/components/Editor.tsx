@@ -90,6 +90,10 @@ function htmlToMarkdown(html: string): string {
     .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n')
     .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
     .replace(/<em[^>]*>(.*?)<\/em>/gi, '_$1_')
+    // List items need an explicit line break — without this "<li>A</li><li>B</li>"
+    // collapses to "AB", corrupting word counts and section splitting.
+    .replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n')
+    .replace(/<\/(ul|ol)>/gi, '\n')
     .replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<[^>]+>/g, '')

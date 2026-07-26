@@ -40,6 +40,26 @@ function genId(): string {
   return `${Date.now().toString(36)}-${idCounter.toString(36)}-${Math.random().toString(36).slice(2)}`
 }
 
+/** Record an accept/reject against the server's run row. Telemetry — never blocks. */
+function logDecision(runId: string, decision: 'accepted' | 'rejected'): Promise<unknown> {
+  return fetch('/api/session/log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'decision', run_id: runId, decision }),
+  }).catch(console.error)
+}
+
+/** Pull the message out of an error response, whatever shape it arrived in. */
+async function readApiError(res: Response): Promise<string> {
+  const raw = await res.text().catch(() => '')
+  try {
+    const parsed = JSON.parse(raw) as { error?: string }
+    if (parsed.error) return parsed.error
+  } catch { /* not JSON — fall through */ }
+  // An HTML error page is useless in a toast; show the status instead
+  return /^\s*</.test(raw) || !raw ? `Request failed (${res.status})` : raw
+}
+
 interface PendingPreview {
   skill: Skill
   systemPrompt: string
@@ -117,7 +137,21 @@ export default function Home() {
 
   // ── Load skills + settings on mount ────────────────────────────────────────
   useEffect(() => {
-    fetch('/api/skills').then(r => r.json()).then(setSkills).catch(console.error)
+    // A silent failure here leaves the slash menu permanently empty, which reads
+    // as "the app is broken" — so say so, and let the user retry.
+    fetch('/api/skills')
+      .then(async r => { if (!r.ok) throw new Error(await readApiError(r)); return r.json() })
+      .then((list: Skill[]) => {
+        setSkills(list)
+        if (list.length === 0) toast.warning('No skills available', { description: 'Check the /skills folder on the server.' })
+      })
+      .catch(err => {
+        console.error(err)
+        toast.error('Could not load skills', {
+          description: 'The slash menu will be empty until this succeeds.',
+          action: { label: 'Retry', onClick: () => window.location.reload() },
+        })
+      })
     fetch('/api/settings').then(r => r.json()).then((s: Record<string, string>) => {
       if (s.api_enabled === 'false') setApiEnabled(false)
       if (s.preview_prompt === 'true') setPreviewPrompt(true)
@@ -508,26 +542,32 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manuscript, selection: selection || undefined }),
       })
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) throw new Error(await readApiError(res))
       const data = await res.json()
 
+      // Keep the server's run id: decisions are recorded against that row, and
+      // posting the client-side suggestion id instead matched nothing at all.
+      let runId: string | undefined
+      try {
+        const logRes = await fetch('/api/session/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'run', skill_id: skill.id, model: data.model,
+            prompt_tokens: data.usage.prompt_tokens, completion_tokens: data.usage.completion_tokens,
+            total_tokens: data.usage.total_tokens, estimated_cost_usd: data.usage.estimated_cost_usd,
+            latency_ms: data.latency_ms,
+          }),
+        })
+        if (logRes.ok) runId = (await logRes.json() as { id?: string }).id
+      } catch { /* telemetry only — never block the result on it */ }
+
       const baseAttrs = {
-        id: genId(), skillId: skill.id, model: data.model,
+        id: genId(), skillId: skill.id, model: data.model, runId,
         tokens: data.usage.total_tokens, cost_usd: data.usage.estimated_cost_usd,
         latency_ms: data.latency_ms, verdict: 'pending' as const,
         created_at: new Date().toISOString(),
       }
-
-      await fetch('/api/session/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'run', skill_id: skill.id, model: data.model,
-          prompt_tokens: data.usage.prompt_tokens, completion_tokens: data.usage.completion_tokens,
-          total_tokens: data.usage.total_tokens, estimated_cost_usd: data.usage.estimated_cost_usd,
-          latency_ms: data.latency_ms,
-        }),
-      })
 
       let result: string
       try { result = typeof data.result === 'string' ? data.result : JSON.stringify(data.result) }
@@ -636,7 +676,7 @@ export default function Home() {
       originalText: s?.type === 'annotation' ? (s.match ?? s.text) : undefined,
       replacementText: s?.type === 'annotation' ? (s.replacement ?? s.suggestion) : undefined,
     })
-    await fetch('/api/session/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'decision', run_id: id, decision: 'accepted' }) })
+    if (s?.runId) void logDecision(s.runId, 'accepted')
   }, [suggestions, addActivity])
 
   const handleReject = useCallback(async (id: string) => {
@@ -647,7 +687,7 @@ export default function Home() {
       detail: s?.type === 'annotation' ? (s.match ?? s.text ?? '') : '',
       originalText: s?.type === 'annotation' ? (s.match ?? s.text) : undefined,
     })
-    await fetch('/api/session/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'decision', run_id: id, decision: 'rejected' }) })
+    if (s?.runId) void logDecision(s.runId, 'rejected')
   }, [suggestions, addActivity])
 
   const handleJumpTo = useCallback((id: string) => {

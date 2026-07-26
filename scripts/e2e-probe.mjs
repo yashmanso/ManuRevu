@@ -1,10 +1,10 @@
 // End-to-end verification of the flows that were broken.
 import { chromium } from 'playwright-core'
 
-const EXEC = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
-const URL = 'http://localhost:2323/'
+const EXEC = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+const URL = process.env.APP_URL ?? 'http://localhost:2323/'
 const pass = [], fail = []
-const check = (name, ok, detail = '') => (ok ? pass : fail).push(`${name}${detail ? ' — ' + detail : ''}`)
+const check = (name, ok, detail = "") => { (ok ? pass : fail).push(`${name}${detail ? " — " + detail : ""}`) }
 
 const browser = await chromium.launch({ executablePath: EXEC, args: ['--no-sandbox'] })
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } })
@@ -98,7 +98,9 @@ if (projCount >= 1) {
 }
 
 console.log('\nPASS:'); pass.forEach(p => console.log('  ✓', p))
-console.log('\nFAIL:'); fail.length ? fail.forEach(f => console.log('  ✗', f)) : console.log('  (none)')
+console.log('\nFAIL:')
+if (fail.length) fail.forEach(f => console.log('  ✗', f))
+else console.log('  (none)')
 console.log('\nerrors:', errors.length ? errors.slice(0, 5) : '(none)')
 await browser.close()
 process.exit(fail.length ? 1 : 0)

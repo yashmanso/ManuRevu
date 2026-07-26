@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getAllSettings, setSetting } from '@/lib/settings-store'
+import { apiHandler, readJson } from '@/lib/api-handler'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export const GET = apiHandler(async () => {
   return NextResponse.json(getAllSettings())
-}
+})
 
 const UpdateSchema = z.record(z.string(), z.string())
 
-export async function POST(req: NextRequest) {
-  const body = await req.json()
+export const POST = apiHandler(async (req: NextRequest) => {
+  const body = await readJson(req)
   const parsed = UpdateSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: parsed.error.message }, { status: 400 })
   for (const [k, v] of Object.entries(parsed.data)) {
     setSetting(k, v)
   }
   return NextResponse.json({ ok: true })
-}
+})

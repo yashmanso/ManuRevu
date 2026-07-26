@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 
 interface VersionMeta {
   id: string
@@ -55,25 +56,41 @@ export default function VersionsPanel({ projectId, refreshKey, onSaveVersion, on
 
   const handleSave = async () => {
     setSaving(true)
-    await onSaveVersion(labelDraft.trim() || undefined)
-    setLabelDraft('')
-    load()
-    setSaving(false)
+    try {
+      await onSaveVersion(labelDraft.trim() || undefined)
+      setLabelDraft('')
+      load()
+    } catch (err) {
+      toast.error('Could not save version', { description: err instanceof Error ? err.message : String(err) })
+    } finally {
+      // Without this the button stays disabled on "…" forever after a failure
+      setSaving(false)
+    }
   }
 
   const handleView = async (id: string) => {
     setViewingId(id)
-    const res = await fetch(`/api/manuscripts/${projectId}/versions/${id}`)
-    if (res.ok) {
+    setViewingContent(null)
+    try {
+      const res = await fetch(`/api/manuscripts/${projectId}/versions/${id}`)
+      if (!res.ok) throw new Error(`Request failed (${res.status})`)
       const { content } = await res.json()
       setViewingContent(content)
+    } catch (err) {
+      setViewingId(null)
+      toast.error('Could not open version', { description: err instanceof Error ? err.message : String(err) })
     }
   }
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/manuscripts/${projectId}/versions/${id}`, { method: 'DELETE' })
-    setVersions(prev => prev.filter(v => v.id !== id))
-    if (viewingId === id) { setViewingId(null); setViewingContent(null) }
+    try {
+      const res = await fetch(`/api/manuscripts/${projectId}/versions/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(`Request failed (${res.status})`)
+      setVersions(prev => prev.filter(v => v.id !== id))
+      if (viewingId === id) { setViewingId(null); setViewingContent(null) }
+    } catch (err) {
+      toast.error('Could not delete version', { description: err instanceof Error ? err.message : String(err) })
+    }
   }
 
   const handleRestore = () => {
