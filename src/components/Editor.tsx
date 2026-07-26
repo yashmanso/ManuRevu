@@ -23,13 +23,44 @@ export interface SectionDecoration {
   annotationCount: number
 }
 
+/**
+ * An in-progress "/query" slash command, derived from the document itself.
+ * The document is the single source of truth — mirroring keystrokes into React
+ * state drifts out of sync and makes the deletion range wrong.
+ */
+export interface SlashContext {
+  query: string
+  from: number  // doc position of the "/"
+  coords: { top: number; bottom: number; left: number }
+}
+
+// A slash command is a "/" at the start of a block or after whitespace,
+// followed by non-space characters up to a collapsed cursor. This means
+// "and/or" never triggers the menu, and typing a space dismisses it.
+const SLASH_RE = /(^|\s)\/([^\s/]*)$/
+
+function computeSlashContext(view: EditorView): SlashContext | null {
+  const { state } = view
+  const sel = state.selection
+  if (!sel.empty || !sel.$from.parent.isTextblock) return null
+  const blockStart = sel.$from.start()
+  // Leaf nodes render as one char so plain-text offsets map 1:1 to positions
+  const textBefore = state.doc.textBetween(blockStart, sel.from, '\n', '\n')
+  const m = textBefore.match(SLASH_RE)
+  if (!m) return null
+  const from = blockStart + (m.index ?? 0) + m[1].length
+  const c = view.coordsAtPos(from)
+  return { query: m[2], from, coords: { top: c.top, bottom: c.bottom, left: c.left } }
+}
+
 export interface EditorHandle {
   getMarkdown: () => string
   getHTML: () => string
   getPlainText: () => string
   getSelectedText: () => string
   setContent: (html: string) => void
-  deleteBeforeCursor: (charCount: number) => void
+  /** Delete the pending "/query" text, if any. Returns whether anything was removed. */
+  clearSlashQuery: () => boolean
   selectText: (match: string) => boolean
   replaceText: (match: string, replacement: string) => boolean
   setHighlights: (spans: HighlightSpan[]) => void
@@ -45,6 +76,7 @@ interface EditorProps {
   onHighlightClick?: (id: string) => void
   onHighlightHover?: (id: string, rect: DOMRect) => void
   onHighlightLeave?: () => void
+  onSlashContext?: (ctx: SlashContext | null) => void
 }
 
 function htmlToMarkdown(html: string): string {
@@ -120,17 +152,19 @@ function findMatchRange(text: string, query: string, fromIndex = 0): { idx: numb
 const highlightKey = new PluginKey<DecorationSet>('manurevu-highlights')
 const sectionKey = new PluginKey<DecorationSet>('manurevu-sections')
 
-const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange, onReady, onHighlightClick, onHighlightHover, onHighlightLeave }, ref) => {
+const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange, onReady, onHighlightClick, onHighlightHover, onHighlightLeave, onSlashContext }, ref) => {
   const onChangeRef = useRef(onChange)
   const onReadyRef = useRef(onReady)
   const onHighlightClickRef = useRef(onHighlightClick)
   const onHighlightHoverRef = useRef(onHighlightHover)
   const onHighlightLeaveRef = useRef(onHighlightLeave)
+  const onSlashContextRef = useRef(onSlashContext)
   onChangeRef.current = onChange
   onReadyRef.current = onReady
   onHighlightClickRef.current = onHighlightClick
   onHighlightHoverRef.current = onHighlightHover
   onHighlightLeaveRef.current = onHighlightLeave
+  onSlashContextRef.current = onSlashContext
 
   const editorProps = useMemo(() => ({
     attributes: {
@@ -191,6 +225,10 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
     editorProps,
     onUpdate({ editor: e }) {
       onChangeRef.current?.(htmlToMarkdown(e.getHTML()))
+      onSlashContextRef.current?.(computeSlashContext(e.view))
+    },
+    onSelectionUpdate({ editor: e }) {
+      onSlashContextRef.current?.(computeSlashContext(e.view))
     },
     onCreate({ editor: e }) {
       const highlightPlugin = new Plugin<DecorationSet>({
@@ -230,11 +268,16 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       const { from, to } = editor.state.selection
       return editor.state.doc.textBetween(from, to, ' ')
     },
-    setContent: (html: string) => editor?.commands.setContent(html),
-    deleteBeforeCursor: (charCount: number) => {
-      if (!editor) return
-      const { from } = editor.state.selection
-      editor.commands.deleteRange({ from: Math.max(0, from - charCount), to: from })
+    // emitUpdate:false — a programmatic load is not a user edit, so it must not
+    // trigger onChange (which would schedule an autosave of the just-loaded
+    // content, potentially against a different project).
+    setContent: (html: string) => editor?.commands.setContent(html, { emitUpdate: false }),
+    clearSlashQuery: () => {
+      if (!editor) return false
+      const ctx = computeSlashContext(editor.view)
+      if (!ctx) return false
+      editor.chain().focus().deleteRange({ from: ctx.from, to: editor.state.selection.from }).run()
+      return true
     },
     selectText: (match: string) => {
       if (!editor || !match) return false

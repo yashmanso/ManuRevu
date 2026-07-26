@@ -14,7 +14,7 @@ import ActivityHistory, { type ActivityEntry } from '@/components/ActivityHistor
 import KnowledgeRepo from '@/components/KnowledgeRepo'
 import VersionsPanel from '@/components/VersionsPanel'
 import ProjectSidebar, { type ProjectMeta } from '@/components/ProjectSidebar'
-import type { EditorHandle } from '@/components/Editor'
+import type { EditorHandle, SlashContext } from '@/components/Editor'
 import type { Suggestion, Annotation, SidePanelItem } from '@/lib/suggestion-types'
 import { importFile } from '@/lib/import'
 import { toast } from 'sonner'
@@ -64,9 +64,10 @@ export default function Home() {
   const [activeSuggestionId, setActiveSuggestionId] = useState<string | null>(null)
   const [runStatus, setRunStatus] = useState<RunStatus>('idle')
   const [activeRunLabel, setActiveRunLabel] = useState('')
-  const [slashMenu, setSlashMenu] = useState<{ open: boolean; position: { top: number; left: number }; query: string }>({
-    open: false, position: { top: 0, left: 0 }, query: '',
-  })
+  // Slash command state is derived from the document (see Editor.computeSlashContext),
+  // never accumulated from keystrokes — that drifts out of sync with the text.
+  const [slash, setSlash] = useState<SlashContext | null>(null)
+  const [slashDismissed, setSlashDismissed] = useState(false)
   const [actionsMenu, setActionsMenu] = useState<{ open: boolean; position: { top: number; left: number } }>({
     open: false, position: { top: 0, left: 0 },
   })
@@ -339,40 +340,25 @@ export default function Home() {
   }, [addActivity])
 
   // ── Slash menu ──────────────────────────────────────────────────────────────
-  // Notion-style: "/" typed in the editor opens the menu (the character is
-  // inserted as usual), further typing filters, and runSkill removes the
-  // "/query" text on select. Everything the menu consumes must have landed in
-  // the editor, so the deletion count in runSkill stays exact.
-  useEffect(() => {
-    const inEditor = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest('.ProseMirror')
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!slashMenu.open) {
-        if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || !inEditor(e.target)) return
-        let top = window.innerHeight / 2 - 160
-        let left = window.innerWidth / 2 - 160
-        const sel = window.getSelection()
-        const rect = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).getBoundingClientRect() : null
-        if (rect && (rect.top || rect.left)) {
-          const menuHeight = 320
-          const spaceBelow = window.innerHeight - rect.bottom
-          top = spaceBelow < menuHeight + 16 ? Math.max(8, rect.top - menuHeight - 8) : rect.bottom + 8
-          left = Math.min(rect.left, window.innerWidth - 320 - 16)
-        }
-        setSlashMenu({ open: true, position: { top, left }, query: '' })
-        return
-      }
-      // Focus left the editor — the typed-text bookkeeping no longer holds
-      if (!inEditor(e.target)) { setSlashMenu(m => ({ ...m, open: false })); return }
-      if (e.key === 'Backspace') {
-        // Backspacing past the "/" dismisses the menu (the editor deletes the "/")
-        setSlashMenu(m => m.query ? { ...m, query: m.query.slice(0, -1) } : { ...m, open: false })
-      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        setSlashMenu(m => ({ ...m, query: m.query + e.key }))
-      }
+  // The Editor reports the pending "/query" straight from the document on every
+  // edit and cursor move, so the menu can never disagree with the text — and
+  // selecting a skill deletes an exact document range rather than a guessed
+  // number of characters.
+  const handleSlashContext = useCallback((ctx: SlashContext | null) => {
+    setSlash(ctx)
+    if (!ctx) setSlashDismissed(false) // re-arm once the "/" is gone
+  }, [])
+
+  const slashOpen = !!slash && !slashDismissed
+  const slashPosition = useMemo(() => {
+    if (!slash) return { top: 0, left: 0 }
+    const MENU_H = 320, MENU_W = 320
+    const { top, bottom, left } = slash.coords
+    return {
+      top: window.innerHeight - bottom < MENU_H + 16 ? Math.max(8, top - MENU_H - 8) : bottom + 8,
+      left: Math.max(8, Math.min(left, window.innerWidth - MENU_W - 16)),
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [slashMenu.open])
+  }, [slash])
 
   // ── Selection tracking ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -524,12 +510,12 @@ export default function Home() {
     }
   }, [addActivity, saveAutoVersion])
 
-  const runSkill = useCallback(async (skill: Skill, opts?: { viaSlash?: boolean }) => {
-    const viaSlash = opts?.viaSlash !== false
-    const queryLen = slashMenu.query.length
-    setSlashMenu(m => ({ ...m, open: false }))
+  const runSkill = useCallback(async (skill: Skill) => {
     setActionsMenu(m => ({ ...m, open: false }))
-    if (viaSlash) editorRef.current?.deleteBeforeCursor(1 + queryLen)
+    // Removes the typed "/query" if one is pending; no-op when launched from
+    // the Actions menu. Clearing it also collapses the slash context, which
+    // closes the menu.
+    editorRef.current?.clearSlashQuery()
 
     if (isLocalSkill(skill)) {
       const plainText = editorRef.current?.getPlainText() ?? ''
@@ -576,7 +562,7 @@ export default function Home() {
     }
 
     await executeRun(skill, manuscript, selection)
-  }, [slashMenu.query, apiEnabled, previewPrompt, scopedManuscript, executeRun, selectedSectionIds, longSentenceThreshold, addActivity, saveAutoVersion])
+  }, [apiEnabled, previewPrompt, scopedManuscript, executeRun, selectedSectionIds, longSentenceThreshold, addActivity, saveAutoVersion])
 
   // ── Accept / Reject ───────────────────────────────────────────────────────────
   const handleAccept = useCallback(async (id: string) => {
@@ -782,6 +768,7 @@ export default function Home() {
               onHighlightClick={handleHighlightClick}
               onHighlightHover={handleHighlightHover}
               onHighlightLeave={handleHighlightLeave}
+              onSlashContext={handleSlashContext}
             />
           </div>
         </div>
@@ -838,11 +825,11 @@ export default function Home() {
       <AppStatusBar saveState={saveState} runStatus={runStatus} activeRunLabel={activeRunLabel} wordCount={stats.words} selectionWords={selectionWords} />
 
       {/* Slash command menu */}
-      {slashMenu.open && (
+      {slashOpen && slash && (
         <SlashMenu
-          skills={skills} hasSelection={hasSelection} position={slashMenu.position} query={slashMenu.query}
-          onSelect={runSkill} onClose={() => setSlashMenu(m => ({ ...m, open: false }))}
-          onEditPrompt={skill => { setSlashMenu(m => ({ ...m, open: false })); setEditPromptSkill(skill) }}
+          skills={skills} hasSelection={hasSelection} position={slashPosition} query={slash.query}
+          onSelect={runSkill} onClose={() => setSlashDismissed(true)}
+          onEditPrompt={skill => { setSlashDismissed(true); setEditPromptSkill(skill) }}
         />
       )}
 
@@ -850,7 +837,7 @@ export default function Home() {
       {actionsMenu.open && (
         <SlashMenu
           skills={skills} hasSelection={hasSelection} position={actionsMenu.position} query=""
-          onSelect={skill => runSkill(skill, { viaSlash: false })}
+          onSelect={runSkill}
           onClose={() => setActionsMenu(m => ({ ...m, open: false }))}
           onEditPrompt={skill => { setActionsMenu(m => ({ ...m, open: false })); setEditPromptSkill(skill) }}
         />

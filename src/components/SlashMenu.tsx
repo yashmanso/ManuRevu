@@ -33,15 +33,23 @@ export default function SlashMenu({ skills, hasSelection, position, query, onSel
   })
 
   const handleKey = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIndex(i => Math.min(i + 1, filtered.length - 1)) }
-    if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIndex(i => Math.max(i - 1, 0)) }
-    if (e.key === 'Enter' && filtered[activeIndex]) { e.preventDefault(); onSelect(filtered[activeIndex]) }
-    if (e.key === 'Escape') { e.preventDefault(); onClose() }
+    // Navigation keys belong to the menu while it is open. Captured (see below)
+    // and stopped so the editor never sees them — otherwise Enter would insert
+    // a paragraph and the arrows would move the caret out of the "/query".
+    const owned = e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape'
+    if (!owned) return
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.key === 'ArrowDown') setActiveIndex(i => Math.min(i + 1, filtered.length - 1))
+    else if (e.key === 'ArrowUp') setActiveIndex(i => Math.max(i - 1, 0))
+    else if (e.key === 'Escape') onClose()
+    else if (e.key === 'Enter' && filtered[activeIndex]) onSelect(filtered[activeIndex])
   }, [filtered, activeIndex, onSelect, onClose])
 
   useEffect(() => {
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
+    // Capture phase: runs before ProseMirror's own keydown handling
+    window.addEventListener('keydown', handleKey, true)
+    return () => window.removeEventListener('keydown', handleKey, true)
   }, [handleKey])
 
   // Close when clicking anywhere outside the menu
