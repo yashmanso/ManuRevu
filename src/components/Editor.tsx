@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Highlight from '@tiptap/extension-highlight'
-import { TextSelection, Plugin, PluginKey } from 'prosemirror-state'
+import { TextSelection, Plugin, PluginKey, type EditorState } from 'prosemirror-state'
 import { Decoration, DecorationSet } from 'prosemirror-view'
 import type { EditorView } from 'prosemirror-view'
 import type { Node as PMNode } from 'prosemirror-model'
@@ -61,6 +61,10 @@ export interface EditorHandle {
   setContent: (html: string) => void
   /** Delete the pending "/query" text, if any. Returns whether anything was removed. */
   clearSlashQuery: () => boolean
+  /** Replace the exact span a highlight covers. Falls back to text search if it has no highlight. */
+  replaceById: (id: string, match: string, replacement: string) => boolean
+  /** Select the exact span a highlight covers. Falls back to text search. */
+  selectById: (id: string, match: string) => boolean
   selectText: (match: string) => boolean
   replaceText: (match: string, replacement: string) => boolean
   setHighlights: (spans: HighlightSpan[]) => void
@@ -71,7 +75,7 @@ export interface EditorHandle {
 
 interface EditorProps {
   initialContent?: string
-  onChange?: (markdown: string) => void
+  onChange?: (markdown: string, html: string) => void
   onReady?: () => void
   onHighlightClick?: (id: string) => void
   onHighlightHover?: (id: string, rect: DOMRect) => void
@@ -152,6 +156,19 @@ function findMatchRange(text: string, query: string, fromIndex = 0): { idx: numb
 const highlightKey = new PluginKey<DecorationSet>('manurevu-highlights')
 const sectionKey = new PluginKey<DecorationSet>('manurevu-sections')
 
+/**
+ * Current document range of the highlight belonging to an annotation.
+ * ProseMirror remaps decorations through every transaction, so this stays
+ * correct as the document is edited — and, crucially, it identifies *which*
+ * occurrence the annotation refers to when the same text appears many times.
+ */
+function highlightRange(editor: { state: EditorState }, id: string): { from: number; to: number } | null {
+  const set = highlightKey.getState(editor.state)
+  if (!set) return null
+  const deco = set.find().find(d => (d.spec as { mrId?: string } | undefined)?.mrId === id)
+  return deco ? { from: deco.from, to: deco.to } : null
+}
+
 const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange, onReady, onHighlightClick, onHighlightHover, onHighlightLeave, onSlashContext }, ref) => {
   const onChangeRef = useRef(onChange)
   const onReadyRef = useRef(onReady)
@@ -224,7 +241,8 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
     immediatelyRender: false,
     editorProps,
     onUpdate({ editor: e }) {
-      onChangeRef.current?.(htmlToMarkdown(e.getHTML()))
+      const html = e.getHTML()
+      onChangeRef.current?.(htmlToMarkdown(html), html)
       onSlashContextRef.current?.(computeSlashContext(e.view))
     },
     onSelectionUpdate({ editor: e }) {
@@ -259,7 +277,8 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
     },
   })
 
-  useImperativeHandle(ref, () => ({
+  useImperativeHandle(ref, () => {
+    const handle: EditorHandle = {
     getMarkdown: () => htmlToMarkdown(editor?.getHTML() ?? ''),
     getHTML: () => editor?.getHTML() ?? '',
     getPlainText: () => (editor ? buildTextIndex(editor.state.doc).text : ''),
@@ -286,6 +305,26 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       if (!found) return false
       const { pmFrom, pmTo } = rangeToPM(map, found.idx, found.idx + found.len)
       editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pmFrom, pmTo)).scrollIntoView())
+      editor.view.focus()
+      return true
+    },
+    replaceById: (id: string, match: string, replacement: string) => {
+      if (!editor) return false
+      const range = highlightRange(editor, id)
+      if (range) {
+        editor.chain().focus().insertContentAt(range, replacement).run()
+        return true
+      }
+      // No highlight for this annotation (e.g. it never resolved) — fall back
+      return handle.replaceText(match, replacement)
+    },
+    selectById: (id: string, match: string) => {
+      if (!editor) return false
+      const range = highlightRange(editor, id)
+      if (!range) return handle.selectText(match)
+      editor.view.dispatch(
+        editor.state.tr.setSelection(TextSelection.create(editor.state.doc, range.from, range.to)).scrollIntoView()
+      )
       editor.view.focus()
       return true
     },
@@ -318,6 +357,8 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
             const { pmFrom, pmTo } = rangeToPM(map, idx, end)
             // Extract the solid RGB from rgba(...) for the underline border
             const solidColor = span.color.replace(/rgba?\((\d+),\s*(\d+),\s*(\d+)[^)]*\)/, 'rgb($1,$2,$3)')
+            // The spec id lets Accept/Jump resolve *this* occurrence later; the
+            // decoration is remapped by ProseMirror as the document changes.
             decos.push(Decoration.inline(pmFrom, pmTo, {
               class: 'mr-highlight',
               style: [
@@ -329,7 +370,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
                 'transition:background-color 0.15s, box-shadow 0.15s;',
               ].join(''),
               'data-mr-highlight': span.id,
-            }))
+            }, { mrId: span.id }))
             break
           }
           searchFrom = idx + 1
@@ -393,7 +434,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
       editor.view.focus()
       return true
     },
-  }), [editor])
+    }
+    return handle
+  }, [editor])
 
   useEffect(() => { return () => { editor?.destroy() } }, [editor])
 

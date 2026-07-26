@@ -99,6 +99,8 @@ export default function Home() {
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const statsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The debounced write, captured as an inseparable (project, content) pair
+  const pendingSaveRef = useRef<{ pid: string; html: string } | null>(null)
 
   // ── Hover popover ────────────────────────────────────────────────────────────
   const [popover, setPopover] = useState<{ id: string; rect: DOMRect } | null>(null)
@@ -122,6 +124,30 @@ export default function Home() {
     }).catch(console.error)
   }, [])
 
+  // ── Persistence ─────────────────────────────────────────────────────────────
+
+  /** Write any debounced edit immediately. Safe to call when nothing is pending. */
+  const flushPendingSave = useCallback(async () => {
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null }
+    const pending = pendingSaveRef.current
+    if (!pending) return
+    pendingSaveRef.current = null
+    try {
+      await fetch('/api/manuscript', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pending.pid, content: pending.html }),
+      })
+      setSaveState('saved')
+      setProjects(prev => prev.map(p => p.id === pending.pid ? { ...p, updated_at: new Date().toISOString() } : p))
+    } catch {
+      // Keep it pending so the next edit or flush retries rather than dropping it
+      pendingSaveRef.current = pending
+      setSaveState('idle')
+      toast.error('Could not save changes', { description: 'Your edits are still in the editor — check that the app server is running.' })
+    }
+  }, [])
+
   // ── Project management ──────────────────────────────────────────────────────
 
   const loadProjects = useCallback(async (): Promise<ProjectMeta[]> => {
@@ -130,19 +156,25 @@ export default function Home() {
     return res.json()
   }, [])
 
-  const loadProjectIntoEditor = useCallback(async (id: string) => {
-    const res = await fetch(`/api/manuscript?id=${id}`)
-    if (res.ok) {
-      const data = await res.json() as { content?: string }
-      editorRef.current?.setContent(data.content ?? '')
-    } else {
-      editorRef.current?.setContent('')
-    }
+  // Bumped on every project switch. A load whose sequence is stale must not
+  // touch the editor — otherwise a slow response for project A can overwrite
+  // project B's content after the user has already switched.
+  const loadSeqRef = useRef(0)
+
+  const loadProjectIntoEditor = useCallback(async (id: string, seq: number) => {
+    let content = ''
+    try {
+      const res = await fetch(`/api/manuscript?id=${id}`)
+      if (res.ok) content = (await res.json() as { content?: string }).content ?? ''
+    } catch { /* offline / bad response — fall through to empty */ }
+    if (seq !== loadSeqRef.current) return
+    editorRef.current?.setContent(content)
     setMarkdown(editorRef.current?.getMarkdown() ?? '')
   }, [])
 
-  const loadActivityForProject = useCallback(async (id: string) => {
+  const loadActivityForProject = useCallback(async (id: string, seq: number) => {
     const res = await fetch(`/api/manuscripts/${id}/activity`)
+    if (seq !== loadSeqRef.current) return
     if (!res.ok) { setActivityHistory([]); return }
     const entries = await res.json() as Array<{
       id: string; type: string; label: string; detail?: string
@@ -163,18 +195,27 @@ export default function Home() {
   }, [])
 
   const switchProject = useCallback(async (id: string) => {
+    if (id === activeProjectIdRef.current) return // re-clicking the open project would discard in-flight edits
+    // Persist whatever is still debounced for the project we're leaving, and
+    // wait for it — otherwise the last couple of seconds of typing are lost.
+    await flushPendingSave()
+    const seq = ++loadSeqRef.current
     setSuggestions([])
     setActiveSuggestionId(null)
     setSelectedSectionIds(new Set())
+    setSlash(null)
     setActiveProjectId(id)
+    // Update the ref synchronously so an edit landing before the next commit
+    // is attributed to the new project, not the old one.
+    activeProjectIdRef.current = id
     localStorage.setItem('activeProjectId', id)
     await Promise.all([
-      loadProjectIntoEditor(id),
-      loadActivityForProject(id),
+      loadProjectIntoEditor(id, seq),
+      loadActivityForProject(id, seq),
     ])
     setVersionsRefreshKey(k => k + 1)
     setKnowledgeRefreshKey(k => k + 1)
-  }, [loadProjectIntoEditor, loadActivityForProject])
+  }, [loadProjectIntoEditor, loadActivityForProject, flushPendingSave])
 
   // Initial load: get projects, pick last-used or first
   useEffect(() => {
@@ -233,12 +274,24 @@ export default function Home() {
   }, [])
 
   const handleDeleteProject = useCallback(async (id: string) => {
+    // Drop any debounced write for this project: the save endpoint upserts, so
+    // a late flush would resurrect the row we're about to delete.
+    if (pendingSaveRef.current?.pid === id) {
+      pendingSaveRef.current = null
+      if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null }
+    }
     await fetch(`/api/manuscripts/${id}`, { method: 'DELETE' })
     const list = await loadProjects()
     setProjects(list)
     if (id === activeProjectId) {
       if (list.length > 0) await switchProject(list[0].id)
-      else { setActiveProjectId(''); setActivityHistory([]); editorRef.current?.setContent('') }
+      else {
+        setActiveProjectId('')
+        activeProjectIdRef.current = ''
+        setActivityHistory([])
+        setSuggestions([])
+        editorRef.current?.setContent('')
+      }
     }
   }, [activeProjectId, loadProjects, switchProject])
 
@@ -309,35 +362,37 @@ export default function Home() {
 
   // ── Editor ready + save ─────────────────────────────────────────────────────
 
+  // Last-ditch save when the tab closes: sendBeacon survives unload, fetch may not.
+  useEffect(() => {
+    const handleUnload = () => {
+      const pending = pendingSaveRef.current
+      if (!pending) return
+      navigator.sendBeacon(
+        '/api/manuscript',
+        new Blob([JSON.stringify({ id: pending.pid, content: pending.html })], { type: 'application/json' })
+      )
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => window.removeEventListener('beforeunload', handleUnload)
+  }, [])
+
   const handleEditorReady = useCallback(() => {
     // Content is loaded by switchProject on mount; nothing extra needed here
   }, [])
 
-  const handleEditorChange = useCallback((md: string) => {
+  const handleEditorChange = useCallback((md: string, html: string) => {
     if (statsTimerRef.current) clearTimeout(statsTimerRef.current)
     statsTimerRef.current = setTimeout(() => setMarkdown(md), 1000)
 
+    const pid = activeProjectIdRef.current
+    if (!pid) return
+    // Capture the project *and* its content together, so a flush can never
+    // write one project's text under another project's id.
+    pendingSaveRef.current = { pid, html }
     setSaveState('saving')
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(async () => {
-      const pid = activeProjectIdRef.current
-      if (!pid) return
-      const html = editorRef.current?.getHTML() ?? ''
-      try {
-        await fetch('/api/manuscript', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: pid, content: html }),
-        })
-        setSaveState('saved')
-        addActivity({ type: 'save', label: 'Auto-saved' })
-        // Update project list's updated_at
-        setProjects(prev => prev.map(p => p.id === pid ? { ...p, updated_at: new Date().toISOString() } : p))
-      } catch {
-        setSaveState('idle')
-      }
-    }, 2000)
-  }, [addActivity])
+    saveTimerRef.current = setTimeout(() => { void flushPendingSave() }, 2000)
+  }, [flushPendingSave])
 
   // ── Slash menu ──────────────────────────────────────────────────────────────
   // The Editor reports the pending "/query" straight from the document on every
@@ -568,7 +623,9 @@ export default function Home() {
   const handleAccept = useCallback(async (id: string) => {
     const s = suggestions.find(sg => sg.id === id)
     if (s?.type === 'annotation' && s.match && s.replacement !== undefined) {
-      const applied = editorRef.current?.replaceText(s.match, s.replacement)
+      // By id, not by text: several annotations can share the same `match`
+      // (e.g. every "utilize"), and each must edit its own occurrence.
+      const applied = editorRef.current?.replaceById(id, s.match, s.replacement)
       if (!applied) toast.error('Could not locate text to change. Marking as resolved.')
       else toast.success('Change applied')
     }
@@ -598,7 +655,7 @@ export default function Home() {
     if (!s || s.type !== 'annotation') return
     setActiveSuggestionId(id)
     const target = s.match ?? s.text
-    if (target) editorRef.current?.selectText(target)
+    if (target) editorRef.current?.selectById(id, target)
   }, [suggestions])
 
   const handleHighlightClick = useCallback((id: string) => {
@@ -643,15 +700,24 @@ export default function Home() {
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    // Reset immediately so picking the same file again still fires a change event
+    e.target.value = ''
     if (!file) return
     try {
       const html = await importFile(file)
+      // Importing replaces the whole manuscript — snapshot first so it's undoable
+      const existing = editorRef.current?.getPlainText()?.trim()
+      if (existing) await saveAutoVersion(`Before importing ${file.name}`)
       editorRef.current?.setContent(html)
       const md = editorRef.current?.getMarkdown() ?? ''
       setMarkdown(md)
-      handleEditorChange(md)
-    } catch (err) { console.error('Import failed:', err) }
-  }, [handleEditorChange])
+      handleEditorChange(md, editorRef.current?.getHTML() ?? html)
+      addActivity({ type: 'run', label: `Imported ${file.name}` })
+      toast.success(`Imported ${file.name}`, { description: existing ? 'Previous text saved as a version.' : undefined })
+    } catch (err) {
+      toast.error('Import failed', { description: err instanceof Error ? err.message : String(err) })
+    }
+  }, [handleEditorChange, saveAutoVersion, addActivity])
 
   // ── History navigation ────────────────────────────────────────────────────────
   const handleJumpToText = useCallback((text: string) => {
