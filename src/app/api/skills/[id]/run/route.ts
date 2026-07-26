@@ -2,28 +2,36 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { loadSkill } from '@/lib/skills'
 import { runLLM } from '@/lib/llm'
+import { resolveCitation } from '@/lib/citations'
+import { getSetting } from '@/lib/settings-store'
+import { apiHandler, readJson } from '@/lib/api-handler'
 
 const RequestSchema = z.object({
   manuscript: z.string().min(1),
   selection: z.string().optional(),
 })
 
-export async function POST(
+export const POST = apiHandler(async (
   req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const skill = loadSkill(params.id)
+  { params }: { params: Promise<{ id: string }> }
+) => {
+  const { id } = await params
+  const skill = loadSkill(id)
   if (!skill) {
-    return NextResponse.json({ error: `Skill '${params.id}' not found` }, { status: 404 })
+    return NextResponse.json({ error: `Skill '${id}' not found` }, { status: 404 })
   }
 
-  const body = await req.json()
+  const body = await readJson(req)
   const parsed = RequestSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.message }, { status: 400 })
   }
 
   const { manuscript, selection } = parsed.data
+
+  // Skill-level model_override wins; otherwise use the settings-level tier override
+  const tierOverride = getSetting(skill.tier === 'structural' ? 'structural_model' : 'writing_model')
+  const modelOverride = skill.model_override ?? tierOverride ?? undefined
 
   // For two-pass skills (argument-consistency), body contains ---PASS2--- separator
   const passes = skill.body.split(/\n---PASS2---\n/)
@@ -43,7 +51,7 @@ export async function POST(
 
     const pass1 = await runLLM({
       tier: skill.tier,
-      model_override: skill.model_override,
+      model_override: modelOverride,
       system: pass1Prompt,
       user: userContent1,
     })
@@ -52,7 +60,7 @@ export async function POST(
 
     const pass2 = await runLLM({
       tier: skill.tier,
-      model_override: skill.model_override,
+      model_override: modelOverride,
       system: pass2Prompt,
       user: userContent2,
     })
@@ -66,14 +74,39 @@ export async function POST(
     }
   } else {
     // Single-pass
-    const userContent = [
-      selection ? `SELECTED TEXT:\n${selection}` : null,
-      `MANUSCRIPT:\n${manuscript}`,
-    ].filter(Boolean).join('\n\n')
+    let userContent: string
+
+    if (skill.id === 'citation-claim' && selection) {
+      // Extract first Author-Year citation from selection
+      const citationMatch = selection.match(/([A-Z][a-zA-Z'-]+(?:\s+et\s+al\.?|(?:\s+[&]\s+[A-Z][a-zA-Z'-]+))?,?\s+\d{4}[a-z]?)/)
+      if (citationMatch) {
+        const citationString = citationMatch[1]
+        const resolved = await resolveCitation(citationString)
+        const sourceText = resolved.full_text ?? resolved.abstract
+        const sourceBlock = sourceText
+          ? `Title: ${resolved.title ?? 'Unknown'}\n${sourceText.slice(0, 3000)}`
+          : 'Source not available — verdict must be source_unavailable'
+        userContent = [
+          `MANUSCRIPT CLAIM CONTEXT:\n${selection}`,
+          `CITED PAPER SOURCE:\n${sourceBlock}`,
+          `CITATION: ${citationString}`,
+        ].join('\n\n')
+      } else {
+        userContent = [
+          `SELECTED TEXT:\n${selection}`,
+          `MANUSCRIPT:\n${manuscript}`,
+        ].join('\n\n')
+      }
+    } else {
+      userContent = [
+        selection ? `SELECTED TEXT:\n${selection}` : null,
+        `MANUSCRIPT:\n${manuscript}`,
+      ].filter(Boolean).join('\n\n')
+    }
 
     const run = await runLLM({
       tier: skill.tier,
-      model_override: skill.model_override,
+      model_override: modelOverride,
       system: skill.body,
       user: userContent,
     })
@@ -87,6 +120,6 @@ export async function POST(
     result: finalResult,
     usage: totalUsage,
     latency_ms: Date.now() - startTime,
-    model: skill.model_override ?? (skill.tier === 'structural' ? 'google/gemini-flash-1.5' : 'google/gemini-pro-1.5'),
+    model: modelOverride ?? (skill.tier === 'structural' ? 'google/gemini-flash-1.5' : 'google/gemini-pro-1.5'),
   })
-}
+})
