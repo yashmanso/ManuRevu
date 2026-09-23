@@ -35,6 +35,9 @@ export const SKILL_META: Record<string, SkillMeta> = {
   'repetition-detector':   { label: 'Repetition',            color: '#84cc16', sidebar: { bg: 'bg-lime-50',   border: 'border-lime-200',   accent: 'bg-lime-500',   label: 'bg-lime-100 text-lime-700' } },
   'reference-consistency': { label: 'Reference Consistency', color: '#d97706', sidebar: { bg: 'bg-amber-50',  border: 'border-amber-200',  accent: 'bg-amber-500',  label: 'bg-amber-100 text-amber-700' } },
   'evidence-opportunities': { label: 'Evidence Opportunities', color: '#059669', sidebar: { bg: 'bg-emerald-50', border: 'border-emerald-200', accent: 'bg-emerald-500', label: 'bg-emerald-100 text-emerald-700' } },
+  'terminology-consistency': { label: 'Terminology Consistency', color: '#0ea5e9', sidebar: { bg: 'bg-sky-50', border: 'border-sky-200', accent: 'bg-sky-500', label: 'bg-sky-100 text-sky-700' } },
+  'reverse-outline':        { label: 'Reverse Outline',        color: '#8b5cf6', sidebar: { bg: 'bg-violet-50', border: 'border-violet-200', accent: 'bg-violet-500', label: 'bg-violet-100 text-violet-700' } },
+  'reviewer-response':      { label: 'Reviewer Response',      color: '#db2777', sidebar: { bg: 'bg-fuchsia-50', border: 'border-fuchsia-200', accent: 'bg-fuchsia-500', label: 'bg-fuchsia-100 text-fuchsia-700' } },
 }
 
 const FALLBACK_SIDEBAR = { bg: 'bg-neutral-50', border: 'border-neutral-200', accent: 'bg-neutral-400', label: 'bg-neutral-100 text-neutral-600' }
@@ -65,7 +68,7 @@ export function skillTint(skillId: string): string {
 
 // Skills that always run in the browser (no LLM) even if the server-side
 // frontmatter flag is missing — kept as a fallback for older skill files.
-export const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-choice', 'article-usage', 'reference-consistency', 'evidence-opportunities'])
+export const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-choice', 'article-usage', 'reference-consistency', 'evidence-opportunities', 'terminology-consistency'])
 
 export function isLocalSkill(skill: Pick<SkillInfo, 'id' | 'local'>): boolean {
   return !!skill.local || LOCAL_SKILL_IDS.has(skill.id)
