@@ -59,6 +59,8 @@ export interface EditorHandle {
   getPlainText: () => string
   getSelectedText: () => string
   setContent: (html: string) => void
+  /** Insert text at the (last) cursor position. Returns false if the editor isn't ready. */
+  insertAtCursor: (text: string, opts?: { spaceBefore?: boolean }) => boolean
   /** Delete the pending "/query" text, if any. Returns whether anything was removed. */
   clearSlashQuery: () => boolean
   /** Replace the exact span a highlight covers. Falls back to text search if it has no highlight. */
@@ -295,6 +297,16 @@ const Editor = forwardRef<EditorHandle, EditorProps>(({ initialContent, onChange
     // trigger onChange (which would schedule an autosave of the just-loaded
     // content, potentially against a different project).
     setContent: (html: string) => editor?.commands.setContent(html, { emitUpdate: false }),
+    insertAtCursor: (text: string, opts?: { spaceBefore?: boolean }) => {
+      if (!editor) return false
+      // ProseMirror keeps its selection after blur, so this lands where the
+      // user last clicked even though focus is currently in the sidebar.
+      const { from } = editor.state.selection
+      const prev = from > 1 ? editor.state.doc.textBetween(from - 1, from) : ''
+      const needsSpace = opts?.spaceBefore && prev !== '' && !/\s/.test(prev)
+      editor.chain().focus().insertContent((needsSpace ? ' ' : '') + text).run()
+      return true
+    },
     clearSlashQuery: () => {
       if (!editor) return false
       const ctx = computeSlashContext(editor.view)

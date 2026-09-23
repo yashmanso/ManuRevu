@@ -34,6 +34,7 @@ export const SKILL_META: Record<string, SkillMeta> = {
   'convoluted-ambiguous':  { label: 'Convoluted/Ambiguous',  color: '#f43f5e', sidebar: { bg: 'bg-rose-50',   border: 'border-rose-200',   accent: 'bg-rose-500',   label: 'bg-rose-100 text-rose-700' } },
   'repetition-detector':   { label: 'Repetition',            color: '#84cc16', sidebar: { bg: 'bg-lime-50',   border: 'border-lime-200',   accent: 'bg-lime-500',   label: 'bg-lime-100 text-lime-700' } },
   'reference-consistency': { label: 'Reference Consistency', color: '#d97706', sidebar: { bg: 'bg-amber-50',  border: 'border-amber-200',  accent: 'bg-amber-500',  label: 'bg-amber-100 text-amber-700' } },
+  'evidence-opportunities': { label: 'Evidence Opportunities', color: '#059669', sidebar: { bg: 'bg-emerald-50', border: 'border-emerald-200', accent: 'bg-emerald-500', label: 'bg-emerald-100 text-emerald-700' } },
 }
 
 const FALLBACK_SIDEBAR = { bg: 'bg-neutral-50', border: 'border-neutral-200', accent: 'bg-neutral-400', label: 'bg-neutral-100 text-neutral-600' }
@@ -64,7 +65,7 @@ export function skillTint(skillId: string): string {
 
 // Skills that always run in the browser (no LLM) even if the server-side
 // frontmatter flag is missing — kept as a fallback for older skill files.
-export const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-choice', 'article-usage', 'reference-consistency'])
+export const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-choice', 'article-usage', 'reference-consistency', 'evidence-opportunities'])
 
 export function isLocalSkill(skill: Pick<SkillInfo, 'id' | 'local'>): boolean {
   return !!skill.local || LOCAL_SKILL_IDS.has(skill.id)

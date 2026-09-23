@@ -97,6 +97,72 @@ if (projCount >= 1) {
     restored.includes('CONTENT OF PROJECT B'), JSON.stringify(restored.slice(0, 60)))
 }
 
+// ---- 7. Evidence vault: upload papers, find flow-safe insertion points ----
+// Fixtures are prefixed "e2e-" and only those are cleaned up, so running this
+// against a real vault never touches the user's own papers.
+const cleanupFixtures = () => page.evaluate(async () => {
+  const docs = await (await fetch('/api/evidence')).json()
+  for (const d of docs) if (d.filename.startsWith('e2e-')) await fetch(`/api/evidence/${d.id}`, { method: 'DELETE' })
+})
+await cleanupFixtures()
+const paper = (name, fm, body) => ({ name, mimeType: 'text/markdown', buffer: Buffer.from(`---\n${fm}\n---\n${body}`) })
+const papers = [
+  paper('e2e-edmondson.md', 'title: Psychological Safety and Learning Behavior in Work Teams\nauthors: Edmondson, A.\nyear: 1999',
+    '## Theory\nTeam psychological safety is a shared belief that the team is safe for interpersonal risk taking. When psychological safety is high, members are willing to ask questions, seek feedback, report errors, and propose new ideas without fear of rejection by the team leader.\n\nLeader behavior is a critical antecedent of psychological safety. Team leaders who invite input and acknowledge their own fallibility signal that speaking up is welcome, and members calibrate their willingness to report errors to these cues from the leader.'),
+  paper('e2e-zimmerman.md', 'title: Beyond Survival\nauthors: Zimmerman, M.; Zeitz, G.\nyear: 2002',
+    '## Legitimacy\nNew ventures suffer from a liability of newness: without a track record they struggle to acquire resources from investors. Frequent strategic change can threaten legitimacy, because audiences may read repeated repositioning as incompetence unless founders frame the change as a coherent evolution of the original vision.'),
+  paper('e2e-protein.md', 'title: Folding Kinetics\nauthors: Levinthal, C.\nyear: 2021',
+    '## Results\nThe folding kinetics of small globular proteins follow a two-state model in which the transition state ensemble is compact and native-like, and hydrophobic core residues form early contacts during folding at physiological temperature.'),
+]
+await page.locator('button', { hasText: /^Evidence$/ }).click()
+await page.locator('input[type=file][accept=".md,.markdown,.txt"]').setInputFiles(papers)
+await page.waitForTimeout(1500)
+check('papers upload into the vault', (await page.locator('text=Papers').first().innerText()).includes('(3)') ||
+  (await page.evaluate(async () => (await (await fetch('/api/evidence')).json()).filter(d => d.filename.startsWith('e2e-')).length)) === 3)
+check('cite key read from frontmatter', await page.locator('text=(Zimmerman & Zeitz, 2002)').count() > 0)
+
+await editor.click()
+await page.keyboard.press('Control+A')
+await page.keyboard.press('Delete')
+for (const line of [
+  'Introduction',
+  'Founding teams operate under extreme uncertainty, and how they learn from setbacks shapes whether the venture survives. Teams that openly report errors tend to adapt faster than teams that conceal them. This openness is not automatic, however.',
+  'Theory',
+  'Investors judge unproven ventures on the coherence of their story and the track record of the founders. A venture that pivots frequently may appear unfocused to these audiences, which matters for early ventures seeking resources.',
+]) { await page.keyboard.type(line); await page.keyboard.press('Enter') }
+await page.waitForTimeout(400)
+
+await page.locator('button', { hasText: /^Evidence$/ }).click()
+await page.locator('button', { hasText: 'Find where to add' }).click()
+await page.waitForTimeout(2000)
+const evCards = page.locator('[data-suggestion-card]')
+const evCount = await evCards.count()
+check('scan finds evidence opportunities', evCount >= 2, `got ${evCount}`)
+const allText = await page.locator('.w-80').innerText()
+check('unrelated paper is never suggested', !allText.includes('Levinthal'))
+check('every opportunity is highlighted in the text', (await page.locator('[data-mr-highlight]').count()) >= evCount, `${await page.locator('[data-mr-highlight]').count()} highlights`)
+const flowSafe = !/\. This openness/.test(allText) || allText.includes('refers back')
+check('never proposes inserting before an anaphoric "This…" sentence', flowSafe)
+
+const acceptBtn = evCards.locator('button', { hasText: /^Accept$/ }).first()
+if (await acceptBtn.count()) {
+  await acceptBtn.click()
+  await page.waitForTimeout(600)
+  const doc = await editor.innerText()
+  check('Accept inserts the citation inside the sentence', /\((?:Edmondson, 1999|Zimmerman & Zeitz, 2002)\)\./.test(doc), JSON.stringify(doc.match(/.{30}\([A-Z][^)]*\d{4}\)\./)?.[0]))
+} else check('a claim-support suggestion with Accept exists', false)
+
+await page.locator('button', { hasText: /^Evidence$/ }).click()
+await page.locator('input[placeholder="Search your papers…"]').fill('leader errors speaking up')
+await page.waitForTimeout(800)
+check('search finds the relevant passage', (await page.locator('text=Edmondson, 1999').count()) > 0)
+await editor.click()
+await page.keyboard.press('Control+End')
+await page.locator('button', { hasText: 'Insert citation' }).first().click()
+await page.waitForTimeout(400)
+check('Insert citation lands at the cursor', (await editor.innerText()).trimEnd().endsWith('(Edmondson, 1999)'))
+await cleanupFixtures()
+
 console.log('\nPASS:'); pass.forEach(p => console.log('  ✓', p))
 console.log('\nFAIL:')
 if (fail.length) fail.forEach(f => console.log('  ✗', f))

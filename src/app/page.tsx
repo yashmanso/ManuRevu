@@ -21,7 +21,8 @@ import { toast } from 'sonner'
 import { computeStats } from '@/lib/manuscript-stats'
 import { splitSections } from '@/lib/sections'
 import SettingsPanel from '@/components/SettingsPanel'
-import { runLocalSkill } from '@/lib/local-skills/index'
+import { runLocalSkill, type LocalIssue } from '@/lib/local-skills/index'
+import EvidencePanel from '@/components/EvidencePanel'
 import AnnotationPopover from '@/components/AnnotationPopover'
 import { isLocalSkill, skillHighlight, type SkillInfo } from '@/lib/skill-meta'
 
@@ -32,7 +33,7 @@ type Skill = SkillInfo
 
 type RunStatus = 'idle' | 'running'
 type SaveState = 'idle' | 'saving' | 'saved'
-type SidebarTab = 'review' | 'history' | 'knowledge' | 'versions'
+type SidebarTab = 'review' | 'evidence' | 'history' | 'knowledge' | 'versions'
 
 let idCounter = 0
 function genId(): string {
@@ -615,9 +616,30 @@ export default function Home() {
     if (isLocalSkill(skill)) {
       const plainText = editorRef.current?.getPlainText() ?? ''
       if (!plainText.trim()) { toast.warning('Editor is empty.'); return }
+      let localResult: { issues: LocalIssue[] } | null
+      if (skill.id === 'evidence-opportunities') {
+        // Local, but computed server-side: the vault of papers lives in SQLite
+        try {
+          const res = await fetch('/api/evidence/opportunities', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: plainText }),
+          })
+          if (!res.ok) throw new Error(await readApiError(res))
+          const data = await res.json() as { docCount: number; issues: LocalIssue[] }
+          if (data.docCount === 0) {
+            toast.info('Your Evidence vault is empty', { description: 'Add markdown versions of the papers you want to draw on, then run this again.' })
+            setSidebarTab('evidence')
+            return
+          }
+          localResult = data
+        } catch (err) {
+          toast.error(`${skill.name} failed`, { description: err instanceof Error ? err.message : String(err) })
+          return
+        }
+      } else {
+        localResult = runLocalSkill(skill.id, plainText, longSentenceThreshold)
+      }
       const versionId = await saveAutoVersion(`Before ${skill.name}`)
       addActivity({ type: 'run', label: skill.name, skillId: skill.id, detail: 'local · no API cost', versionId })
-      const localResult = runLocalSkill(skill.id, plainText, longSentenceThreshold)
       if (localResult) {
         const newItems: Annotation[] = localResult.issues.map(issue => ({
           id: genId(), skillId: skill.id, model: 'local', tokens: 0, cost_usd: 0, latency_ms: 0,
@@ -759,6 +781,20 @@ export default function Home() {
     }
   }, [handleEditorChange, saveAutoVersion, addActivity])
 
+  // ── Evidence vault ────────────────────────────────────────────────────────────
+  const handleFindEvidence = useCallback(() => {
+    const skill = skills.find(s => s.id === 'evidence-opportunities')
+    if (skill) void runSkill(skill)
+    else toast.error('Evidence Opportunities skill not found', { description: 'skills/evidence-opportunities.md is missing.' })
+  }, [skills, runSkill])
+
+  const handleInsertCitation = useCallback((cite: string) => {
+    // At the cursor, with a leading space unless one is already there
+    const inserted = editorRef.current?.insertAtCursor(`(${cite})`, { spaceBefore: true })
+    if (inserted) toast.success(`Inserted (${cite})`, { description: 'Placed at your cursor in the manuscript.' })
+    else toast.warning('Click in the manuscript first to place the cursor.')
+  }, [])
+
   // ── History navigation ────────────────────────────────────────────────────────
   const handleJumpToText = useCallback((text: string) => {
     editorRef.current?.selectText(text)
@@ -780,6 +816,7 @@ export default function Home() {
   type TabMeta = { id: SidebarTab; label: string; badge?: number }
   const TAB_META: TabMeta[] = [
     { id: 'review',   label: 'Review',   badge: pendingCount > 0 ? pendingCount : undefined },
+    { id: 'evidence', label: 'Evidence' },
     { id: 'history',  label: 'History',  badge: activityHistory.length > 0 ? activityHistory.length : undefined },
     { id: 'knowledge',label: 'Knowledge',badge: knowledgeCount > 0 ? knowledgeCount : undefined },
     { id: 'versions', label: 'Versions' },
@@ -914,6 +951,14 @@ export default function Home() {
             )}
             {sidebarTab === 'knowledge' && (
               <KnowledgeRepo refreshKey={knowledgeRefreshKey} />
+            )}
+            {sidebarTab === 'evidence' && (
+              <EvidencePanel
+                onFindOpportunities={handleFindEvidence}
+                onInsertCitation={handleInsertCitation}
+                getSelectedText={() => editorRef.current?.getSelectedText() ?? ''}
+                hasSelection={hasSelection}
+              />
             )}
             {sidebarTab === 'versions' && activeProjectId && (
               <VersionsPanel
