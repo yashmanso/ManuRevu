@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { getSkillMeta, skillTint } from '@/lib/skill-meta'
+import ChangePreview from '@/components/ChangePreview'
 
 interface AnnotationPopoverProps {
   message: string
@@ -93,11 +94,12 @@ export default function AnnotationPopover({
         <p className="text-sm text-neutral-800 dark:text-neutral-100 leading-snug">{message}</p>
 
         {canApply ? (
-          <p className="text-xs leading-relaxed break-words">
-            <span className="text-red-600 dark:text-red-400 line-through decoration-red-400">{match}</span>
-            {' '}
-            <span className="text-green-700 dark:text-green-400 font-medium">{replacement}</span>
-          </p>
+          <>
+            <ChangePreview before={match!} after={replacement!} />
+            {suggestion && (
+              <p className="text-neutral-500 dark:text-neutral-400 text-xs leading-relaxed break-words">{suggestion}</p>
+            )}
+          </>
         ) : (
           <>
             {match && (

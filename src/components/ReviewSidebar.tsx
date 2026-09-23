@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import type { Suggestion, Annotation, SidePanelItem } from '@/lib/suggestion-types'
 import { getSkillMeta } from '@/lib/skill-meta'
+import ChangePreview from '@/components/ChangePreview'
 
 interface ReviewSidebarProps {
   suggestions: Suggestion[]
@@ -29,11 +30,13 @@ function AnnotationCard({ item, active, onAccept, onReject, onJumpTo, onSaveToKn
         <p className="text-neutral-800 dark:text-neutral-100 text-sm leading-snug mb-1.5">{item.message}</p>
         {/* Track-changes style before → after when a concrete fix exists */}
         {canApply ? (
-          <p className="text-xs leading-relaxed break-words mb-1">
-            <span className="text-red-600 dark:text-red-400 line-through decoration-red-400">{item.match}</span>
-            {' '}
-            <span className="text-green-700 dark:text-green-400 font-medium">{item.replacement}</span>
-          </p>
+          <>
+            <ChangePreview before={item.match!} after={item.replacement!} className="mb-1" />
+            {/* The rationale (e.g. the source quote backing a citation) matters before accepting */}
+            {item.suggestion && (
+              <p className="text-neutral-500 dark:text-neutral-400 text-xs leading-relaxed break-words">{item.suggestion}</p>
+            )}
+          </>
         ) : (
           <>
             {item.text && (
