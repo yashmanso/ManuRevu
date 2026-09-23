@@ -2,14 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { pickFolder } from '@/lib/pick-folder'
 import ReferenceVaultSection from '@/components/settings/ReferenceVaultSection'
 import { MODEL_OPTIONS, resolveModel, modelLabel } from '@/lib/models'
 
 interface Settings {
   citation_backend?: string
   scite_api_key?: string
-  pdf_watch_folder?: string
+  openrouter_api_key?: string
   structural_model?: string
   writing_model?: string
 }
@@ -27,9 +26,6 @@ interface SettingsPanelProps {
 export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [settings, setSettings] = useState<Settings>({})
   const [saving, setSaving] = useState(false)
-  const [reindexing, setReindexing] = useState(false)
-  const [reindexCount, setReindexCount] = useState<number | null>(null)
-  const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   const [cacheCleared, setCacheCleared] = useState<number | null>(null)
   const [clearingCache, setClearingCache] = useState(false)
 
@@ -47,38 +43,6 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
       })
     } finally {
       setSaving(false)
-    }
-  }
-
-  const reindex = async () => {
-    setReindexing(true)
-    setReindexCount(null)
-    try {
-      const res = await fetch('/api/pdfs/reindex', { method: 'POST' })
-      const data = await res.json() as { indexed: number }
-      setReindexCount(data.indexed)
-    } finally {
-      setReindexing(false)
-    }
-  }
-
-  const browseWatchedFolder = async () => {
-    const path = await pickFolder()
-    if (path) setSettings(s => ({ ...s, pdf_watch_folder: path }))
-  }
-
-  const uploadPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploadStatus('Uploading…')
-    const form = new FormData()
-    form.append('file', file)
-    try {
-      const res = await fetch('/api/pdfs/upload', { method: 'POST', body: form })
-      if (res.ok) setUploadStatus(`Indexed: ${file.name}`)
-      else setUploadStatus('Upload failed')
-    } catch {
-      setUploadStatus('Upload failed')
     }
   }
 
@@ -126,6 +90,23 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
             </select>
           </div>
           <p className={hintCls}>Prices shown as input / output per million tokens. Skill-level overrides still take precedence.</p>
+
+          <div className="mt-3">
+            <label className={labelCls}>OpenRouter API Key</label>
+            <input
+              type="password"
+              placeholder="sk-or-…"
+              value={settings.openrouter_api_key ?? ''}
+              onChange={e => setSettings(s => ({ ...s, openrouter_api_key: e.target.value }))}
+              className={`${inputCls} font-mono`}
+            />
+            <p className={hintCls}>
+              Required for any skill that isn&apos;t local (local skills — Long Sentences, Verb Simplification, Word Choice,
+              Article Usage, Reference &amp; Terminology Consistency, Evidence Vault — run with no key needed).
+              Get a key at <span className="font-mono">openrouter.ai/keys</span>. Stored locally in SQLite and sent only to OpenRouter;
+              falls back to the <span className="font-mono">OPENROUTER_API_KEY</span> environment variable if left blank.
+            </p>
+          </div>
         </section>
 
         {/* Citation backend */}
@@ -164,42 +145,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           )}
         </section>
 
-        {/* PDF sources */}
-        <section className="mb-6">
-          <h3 className={headingCls}>Local PDF Library</h3>
-
-          <div className="mb-3">
-            <label className={labelCls}>Watched Folder Path</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="/Users/you/Zotero/storage or ~/Papers"
-                value={settings.pdf_watch_folder ?? ''}
-                onChange={e => setSettings(s => ({ ...s, pdf_watch_folder: e.target.value }))}
-                className={`${inputCls} flex-1 font-mono`}
-              />
-              <Button size="sm" variant="outline" onClick={browseWatchedFolder}>
-                Browse
-              </Button>
-              <Button size="sm" variant="outline" onClick={reindex} disabled={reindexing}>
-                {reindexing ? 'Indexing…' : 'Re-index'}
-              </Button>
-            </div>
-            {reindexCount !== null && (
-              <p className="text-xs text-green-600 dark:text-green-400 mt-1">Indexed {reindexCount} PDF{reindexCount !== 1 ? 's' : ''}</p>
-            )}
-          </div>
-
-          <div>
-            <label className={labelCls}>Upload individual PDFs</label>
-            <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm text-neutral-600 dark:text-neutral-300 hover:border-neutral-500 dark:hover:border-neutral-400 transition-colors">
-              <span>Choose PDF…</span>
-              <input type="file" accept=".pdf" className="hidden" onChange={uploadPdf} />
-            </label>
-            {uploadStatus && <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">{uploadStatus}</span>}
-          </div>
-        </section>
-
+        {/* PDF sources — one library: folders, Zotero/Mendeley/EndNote, and direct uploads */}
         <ReferenceVaultSection />
 
         {/* Cache management */}

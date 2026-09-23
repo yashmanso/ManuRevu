@@ -34,6 +34,7 @@ export const POST = apiHandler(async (
   const tierOverride = getSetting(skill.tier === 'structural' ? 'structural_model' : 'writing_model')
   // resolveModel swaps out ids that have since been retired upstream
   const modelOverride = resolveModel(skill.tier, skill.model_override ?? tierOverride)
+  const apiKey = getSetting('openrouter_api_key')
 
   // For two-pass skills (argument-consistency), body contains ---PASS2--- separator
   const passes = skill.body.split(/\n---PASS2---\n/)
@@ -54,6 +55,7 @@ export const POST = apiHandler(async (
     const pass1 = await runLLM({
       tier: skill.tier,
       model_override: modelOverride,
+      apiKey,
       system: pass1Prompt,
       user: userContent1,
     })
@@ -63,6 +65,7 @@ export const POST = apiHandler(async (
     const pass2 = await runLLM({
       tier: skill.tier,
       model_override: modelOverride,
+      apiKey,
       system: pass2Prompt,
       user: userContent2,
     })
@@ -109,6 +112,7 @@ export const POST = apiHandler(async (
     const run = await runLLM({
       tier: skill.tier,
       model_override: modelOverride,
+      apiKey,
       system: skill.body,
       user: userContent,
     })

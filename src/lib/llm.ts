@@ -4,10 +4,10 @@ import { resolveModel, estimateCost } from './models'
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 
-function getClient(): OpenAI {
-  const apiKey = process.env.OPENROUTER_API_KEY
+function getClient(storedKey?: string | null): OpenAI {
+  const apiKey = storedKey || process.env.OPENROUTER_API_KEY
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY is not set in environment. Add it to .env.local')
+    throw new Error('No OpenRouter API key configured. Add one in Settings → Models, or set OPENROUTER_API_KEY.')
   }
   return new OpenAI({
     baseURL: OPENROUTER_BASE_URL,
@@ -39,6 +39,7 @@ interface RunLLMOptions<T extends z.ZodTypeAny | undefined = undefined> {
   user: string
   schema?: T
   model_override?: string
+  apiKey?: string | null
 }
 
 type RunLLMResult<T extends z.ZodTypeAny | undefined> = T extends z.ZodTypeAny
@@ -55,9 +56,9 @@ export interface LLMUsage {
 export async function runLLM<T extends z.ZodTypeAny | undefined = undefined>(
   options: RunLLMOptions<T>
 ): Promise<{ result: RunLLMResult<T>; usage: LLMUsage; model: string; latency_ms: number }> {
-  const { tier, system, user, schema, model_override } = options
+  const { tier, system, user, schema, model_override, apiKey } = options
   const model = resolveModel(tier, model_override)
-  const client = getClient()
+  const client = getClient(apiKey)
 
   const start = Date.now()
 
