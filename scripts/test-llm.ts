@@ -1,11 +1,12 @@
-import { runLLM, STRUCTURAL_MODEL, WRITING_MODEL } from '../src/lib/llm'
+import { runLLM } from '../src/lib/llm'
+import { DEFAULT_MODELS } from '../src/lib/models'
 import { z } from 'zod'
 
 async function main() {
   console.log('=== ManuRevu LLM Tier Test ===\n')
 
   // Test 1: structural tier, plain text
-  console.log(`Testing STRUCTURAL tier (${STRUCTURAL_MODEL})...`)
+  console.log(`Testing STRUCTURAL tier (${DEFAULT_MODELS.structural})...`)
   try {
     const { result, usage, latency_ms } = await runLLM({
       tier: 'structural',
@@ -23,7 +24,7 @@ async function main() {
   }
 
   // Test 2: writing tier, plain text
-  console.log(`Testing WRITING tier (${WRITING_MODEL})...`)
+  console.log(`Testing WRITING tier (${DEFAULT_MODELS.writing})...`)
   try {
     const { result, usage, latency_ms } = await runLLM({
       tier: 'writing',

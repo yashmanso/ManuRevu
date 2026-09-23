@@ -1,10 +1,8 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
+import { resolveModel, estimateCost } from './models'
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
-
-export const STRUCTURAL_MODEL = 'google/gemini-flash-1.5'
-export const WRITING_MODEL = 'google/gemini-pro-1.5'
 
 function getClient(): OpenAI {
   const apiKey = process.env.OPENROUTER_API_KEY
@@ -22,6 +20,18 @@ function getClient(): OpenAI {
 }
 
 type Tier = 'structural' | 'writing'
+
+/** chat.completions.create, with a model that no longer exists explained in plain words. */
+async function complete(client: OpenAI, params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming) {
+  try {
+    return await client.chat.completions.create(params)
+  } catch (err) {
+    if ((err as { status?: number }).status === 404) {
+      throw new Error(`Model "${params.model}" is not available on OpenRouter any more — pick another one in Settings → Models.`)
+    }
+    throw err
+  }
+}
 
 interface RunLLMOptions<T extends z.ZodTypeAny | undefined = undefined> {
   tier: Tier
@@ -42,25 +52,11 @@ export interface LLMUsage {
   estimated_cost_usd: number
 }
 
-// Cost per million tokens [input, output]
-const MODEL_COSTS: Record<string, [number, number]> = {
-  'google/gemini-flash-1.5': [0.075, 0.30],
-  'google/gemini-pro-1.5': [1.25, 5.00],
-  'anthropic/claude-3.5-sonnet': [3.00, 15.00],
-  'openai/gpt-4o': [2.50, 10.00],
-  'meta-llama/llama-3.1-8b-instruct': [0.06, 0.06],
-}
-
-function estimateCost(model: string, promptTokens: number, completionTokens: number): number {
-  const costs = MODEL_COSTS[model] ?? [1, 1]
-  return (promptTokens * costs[0] + completionTokens * costs[1]) / 1_000_000
-}
-
 export async function runLLM<T extends z.ZodTypeAny | undefined = undefined>(
   options: RunLLMOptions<T>
 ): Promise<{ result: RunLLMResult<T>; usage: LLMUsage; model: string; latency_ms: number }> {
   const { tier, system, user, schema, model_override } = options
-  const model = model_override ?? (tier === 'structural' ? STRUCTURAL_MODEL : WRITING_MODEL)
+  const model = resolveModel(tier, model_override)
   const client = getClient()
 
   const start = Date.now()
@@ -74,7 +70,7 @@ export async function runLLM<T extends z.ZodTypeAny | undefined = undefined>(
 
   if (schema) {
     // Request JSON output
-    const completion = await client.chat.completions.create({
+    const completion = await complete(client, {
       model,
       messages,
       response_format: { type: 'json_object' },
@@ -97,7 +93,7 @@ export async function runLLM<T extends z.ZodTypeAny | undefined = undefined>(
     }
     return { result: parsed.data as RunLLMResult<T>, usage, model, latency_ms }
   } else {
-    const completion = await client.chat.completions.create({ model, messages })
+    const completion = await complete(client, { model, messages })
     responseText = completion.choices[0]?.message?.content ?? ''
     const latency_ms = Date.now() - start
     const usage: LLMUsage = {

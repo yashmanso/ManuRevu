@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { pickFolder } from '@/lib/pick-folder'
 import ReferenceVaultSection from '@/components/settings/ReferenceVaultSection'
+import { MODEL_OPTIONS, resolveModel, modelLabel } from '@/lib/models'
 
 interface Settings {
   citation_backend?: string
@@ -13,13 +14,6 @@ interface Settings {
   writing_model?: string
 }
 
-const MODEL_OPTIONS: { value: string; label: string }[] = [
-  { value: 'google/gemini-flash-1.5', label: 'Gemini Flash 1.5 ($0.075 / $0.30 per M)' },
-  { value: 'google/gemini-pro-1.5', label: 'Gemini Pro 1.5 ($1.25 / $5 per M)' },
-  { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet ($3 / $15 per M)' },
-  { value: 'openai/gpt-4o', label: 'GPT-4o ($2.50 / $10 per M)' },
-  { value: 'meta-llama/llama-3.1-8b-instruct', label: 'Llama 3.1 8B ($0.06 / $0.06 per M)' },
-]
 
 const inputCls = 'w-full border border-neutral-300 dark:border-neutral-600 rounded-md px-3 py-1.5 text-sm bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-900 dark:focus:ring-neutral-300'
 const labelCls = 'block text-xs text-neutral-600 dark:text-neutral-400 mb-1'
@@ -114,21 +108,21 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           <div className="mb-3">
             <label className={labelCls}>Structural model (fast checks)</label>
             <select
-              value={settings.structural_model ?? 'google/gemini-flash-1.5'}
+              value={resolveModel('structural', settings.structural_model)}
               onChange={e => setSettings(s => ({ ...s, structural_model: e.target.value }))}
               className={inputCls}
             >
-              {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {MODEL_OPTIONS.map(o => <option key={o.id} value={o.id}>{modelLabel(o)}</option>)}
             </select>
           </div>
           <div>
             <label className={labelCls}>Writing model (deep review)</label>
             <select
-              value={settings.writing_model ?? 'google/gemini-pro-1.5'}
+              value={resolveModel('writing', settings.writing_model)}
               onChange={e => setSettings(s => ({ ...s, writing_model: e.target.value }))}
               className={inputCls}
             >
-              {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {MODEL_OPTIONS.map(o => <option key={o.id} value={o.id}>{modelLabel(o)}</option>)}
             </select>
           </div>
           <p className={hintCls}>Prices shown as input / output per million tokens. Skill-level overrides still take precedence.</p>

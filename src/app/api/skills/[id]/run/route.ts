@@ -5,6 +5,7 @@ import { runLLM } from '@/lib/llm'
 import { resolveCitation } from '@/lib/citations'
 import { getSetting } from '@/lib/settings-store'
 import { apiHandler, readJson } from '@/lib/api-handler'
+import { resolveModel } from '@/lib/models'
 
 const RequestSchema = z.object({
   manuscript: z.string().min(1),
@@ -31,7 +32,8 @@ export const POST = apiHandler(async (
 
   // Skill-level model_override wins; otherwise use the settings-level tier override
   const tierOverride = getSetting(skill.tier === 'structural' ? 'structural_model' : 'writing_model')
-  const modelOverride = skill.model_override ?? tierOverride ?? undefined
+  // resolveModel swaps out ids that have since been retired upstream
+  const modelOverride = resolveModel(skill.tier, skill.model_override ?? tierOverride)
 
   // For two-pass skills (argument-consistency), body contains ---PASS2--- separator
   const passes = skill.body.split(/\n---PASS2---\n/)
@@ -120,6 +122,6 @@ export const POST = apiHandler(async (
     result: finalResult,
     usage: totalUsage,
     latency_ms: Date.now() - startTime,
-    model: modelOverride ?? (skill.tier === 'structural' ? 'google/gemini-flash-1.5' : 'google/gemini-pro-1.5'),
+    model: modelOverride,
   })
 })
