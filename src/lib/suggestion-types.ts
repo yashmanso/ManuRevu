@@ -9,6 +9,8 @@ export interface InlineDiff {
   rationale?: string
   verdict: SuggestionVerdict
   model: string
+  /** Server-side skill_runs id, when the suggestion came from an LLM run. */
+  runId?: string
   tokens: number
   cost_usd: number
   latency_ms: number
@@ -19,12 +21,16 @@ export interface Annotation {
   type: 'annotation'
   id: string
   skillId: string
-  text: string          // the flagged text span
+  text: string          // the flagged text span (for display)
+  match?: string        // exact verbatim substring of the editor plain text (for locate/replace)
+  replacement?: string  // concrete replacement to apply on Accept, if any
   message: string
   severity?: 'high' | 'medium' | 'low'
   suggestion?: string
   verdict: SuggestionVerdict
   model: string
+  /** Server-side skill_runs id, when the suggestion came from an LLM run. */
+  runId?: string
   tokens: number
   cost_usd: number
   latency_ms: number
@@ -38,6 +44,8 @@ export interface SidePanelItem {
   content: unknown      // parsed JSON from skill
   verdict: SuggestionVerdict
   model: string
+  /** Server-side skill_runs id, when the suggestion came from an LLM run. */
+  runId?: string
   tokens: number
   cost_usd: number
   latency_ms: number

@@ -1,7 +1,7 @@
 ---
 id: argument-consistency
 name: Argument Consistency
-description: Two-pass check: extracts atomic claims per section, then tests pairwise compatibility. Flags genuine contradictions, not nuance.
+description: "Two-pass check: extracts atomic claims per section, then tests pairwise compatibility. Flags genuine contradictions, not nuance."
 tier: writing
 scope: full
 output: sidepanel

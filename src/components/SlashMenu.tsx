@@ -1,28 +1,30 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Badge } from '@/components/ui/badge'
-
-interface Skill {
-  id: string
-  name: string
-  description: string
-  tier: 'structural' | 'writing'
-  scope: 'full' | 'selection' | 'section'
-  output: 'diff' | 'annotation' | 'sidepanel'
-}
+import { isLocalSkill, type SkillInfo } from '@/lib/skill-meta'
 
 interface SlashMenuProps {
-  skills: Skill[]
+  skills: SkillInfo[]
   hasSelection: boolean
   position: { top: number; left: number }
   query: string
-  onSelect: (skill: Skill) => void
+  onSelect: (skill: SkillInfo) => void
   onClose: () => void
+  onEditPrompt?: (skill: SkillInfo) => void
 }
 
-export default function SlashMenu({ skills, hasSelection, position, query, onSelect, onClose }: SlashMenuProps) {
+export default function SlashMenu({ skills, hasSelection, position, query, onSelect, onClose, onEditPrompt }: SlashMenuProps) {
+  const rootRef = useRef<HTMLDivElement>(null)
   const [activeIndex, setActiveIndex] = useState(0)
+  // Reset the highlighted item whenever the filter query changes. Done by
+  // comparing against the previous query during render (the React-recommended
+  // way to adjust state from a prop change) rather than in an effect.
+  const [prevQuery, setPrevQuery] = useState(query)
+  if (query !== prevQuery) {
+    setPrevQuery(query)
+    setActiveIndex(0)
+  }
 
   const filtered = skills.filter(s => {
     if (s.scope === 'selection' && !hasSelection) return false
@@ -30,45 +32,80 @@ export default function SlashMenu({ skills, hasSelection, position, query, onSel
     return true
   })
 
-  useEffect(() => { setActiveIndex(0) }, [query])
-
   const handleKey = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIndex(i => Math.min(i + 1, filtered.length - 1)) }
-    if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIndex(i => Math.max(i - 1, 0)) }
-    if (e.key === 'Enter' && filtered[activeIndex]) { e.preventDefault(); onSelect(filtered[activeIndex]) }
-    if (e.key === 'Escape') { e.preventDefault(); onClose() }
+    // Navigation keys belong to the menu while it is open. Captured (see below)
+    // and stopped so the editor never sees them — otherwise Enter would insert
+    // a paragraph and the arrows would move the caret out of the "/query".
+    const owned = e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape'
+    if (!owned) return
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.key === 'ArrowDown') setActiveIndex(i => Math.min(i + 1, filtered.length - 1))
+    else if (e.key === 'ArrowUp') setActiveIndex(i => Math.max(i - 1, 0))
+    else if (e.key === 'Escape') onClose()
+    else if (e.key === 'Enter' && filtered[activeIndex]) onSelect(filtered[activeIndex])
   }, [filtered, activeIndex, onSelect, onClose])
 
   useEffect(() => {
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
+    // Capture phase: runs before ProseMirror's own keydown handling
+    window.addEventListener('keydown', handleKey, true)
+    return () => window.removeEventListener('keydown', handleKey, true)
   }, [handleKey])
 
-  if (filtered.length === 0) return null
+  // Close when clicking anywhere outside the menu
+  useEffect(() => {
+    const handleMouseDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [onClose])
 
   return (
     <div
-      className="fixed z-50 bg-white border border-neutral-200 rounded-lg shadow-lg w-80 overflow-hidden"
+      ref={rootRef}
+      className="fixed z-50 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg w-80 overflow-hidden"
       style={{ top: position.top, left: position.left }}
     >
-      <div className="px-3 py-2 text-xs text-neutral-500 border-b border-neutral-100 font-medium">
+      <div className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400 border-b border-neutral-100 dark:border-neutral-700 font-medium">
         Skills {hasSelection && <span className="text-blue-500">· selection active</span>}
       </div>
       <div className="max-h-64 overflow-y-auto">
-        {filtered.map((skill, i) => (
+        {filtered.length === 0 ? (
+          <div className="px-3 py-4 text-xs text-neutral-400 dark:text-neutral-500 text-center">
+            No matching skills — <kbd className="px-1 py-0.5 bg-neutral-100 dark:bg-neutral-700 rounded font-mono">Esc</kbd> to dismiss
+          </div>
+        ) : filtered.map((skill, i) => (
           <button
             key={skill.id}
-            className={`w-full text-left px-3 py-2.5 flex flex-col gap-0.5 hover:bg-neutral-50 transition-colors ${i === activeIndex ? 'bg-neutral-50' : ''}`}
+            className={`w-full text-left px-3 py-2.5 flex flex-col gap-0.5 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors ${i === activeIndex ? 'bg-neutral-50 dark:bg-neutral-700' : ''}`}
             onMouseEnter={() => setActiveIndex(i)}
             onClick={() => onSelect(skill)}
           >
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-neutral-900">{skill.name}</span>
-              <Badge variant={skill.tier === 'structural' ? 'secondary' : 'default'} className="text-xs">
-                {skill.tier}
-              </Badge>
+              <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{skill.name}</span>
+              <span className="flex items-center gap-1.5">
+                {onEditPrompt && (
+                  <span
+                    role="button"
+                    tabIndex={-1}
+                    title="Edit prompt"
+                    aria-label={`Edit prompt for ${skill.name}`}
+                    className="text-neutral-300 hover:text-neutral-600 transition-colors text-xs leading-none"
+                    onClick={e => { e.stopPropagation(); onEditPrompt(skill) }}
+                  >
+                    ✎
+                  </span>
+                )}
+                <Badge
+                  variant="secondary"
+                  className={`text-xs ${isLocalSkill(skill) ? 'bg-green-100 text-green-700 border border-green-200' : ''}`}
+                >
+                  {isLocalSkill(skill) ? 'local' : skill.tier}
+                </Badge>
+              </span>
             </div>
-            <span className="text-xs text-neutral-500 line-clamp-1">{skill.description}</span>
+            <span className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-1">{skill.description}</span>
           </button>
         ))}
       </div>
