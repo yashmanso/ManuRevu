@@ -94,6 +94,15 @@ function SidePanelCard({ item, onAccept, onReject }: { item: SidePanelItem } & P
             <p className="text-xs text-neutral-600 dark:text-neutral-300">{String(c.explanation ?? '')}</p>
           </div>
         ))}
+        {Array.isArray(content.paragraphs) && content.paragraphs.map((p: Record<string, unknown>, i: number) => (
+          <div key={i} className={`pl-2 border-l-2 ${p.drifts ? 'border-amber-400' : 'border-neutral-200 dark:border-neutral-600'}`}>
+            <p className="text-xs text-neutral-400 dark:text-neutral-500 font-mono">¶{i + 1}</p>
+            <p className="text-xs text-neutral-700 dark:text-neutral-200">{String(p.gist ?? '')}</p>
+            {!!p.drifts && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">↳ drifts into: {String(p.note ?? '')}</p>
+            )}
+          </div>
+        ))}
       </div>
       {!resolved && (
         <div className="flex gap-1.5 px-3 pb-2.5">
