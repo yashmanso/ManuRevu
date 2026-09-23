@@ -23,6 +23,7 @@ import { splitSections } from '@/lib/sections'
 import SettingsPanel from '@/components/SettingsPanel'
 import { runLocalSkill, type LocalIssue } from '@/lib/local-skills/index'
 import EvidencePanel from '@/components/EvidencePanel'
+import ReviewerPanel from '@/components/ReviewerPanel'
 import AnnotationPopover from '@/components/AnnotationPopover'
 import { isLocalSkill, skillHighlight, type SkillInfo } from '@/lib/skill-meta'
 
@@ -33,7 +34,7 @@ type Skill = SkillInfo
 
 type RunStatus = 'idle' | 'running'
 type SaveState = 'idle' | 'saving' | 'saved'
-type SidebarTab = 'review' | 'evidence' | 'history' | 'knowledge' | 'versions'
+type SidebarTab = 'review' | 'evidence' | 'reviewer' | 'history' | 'knowledge' | 'versions'
 
 let idCounter = 0
 function genId(): string {
@@ -817,6 +818,7 @@ export default function Home() {
   const TAB_META: TabMeta[] = [
     { id: 'review',   label: 'Review',   badge: pendingCount > 0 ? pendingCount : undefined },
     { id: 'evidence', label: 'Evidence' },
+    { id: 'reviewer', label: 'Reviewers' },
     { id: 'history',  label: 'History',  badge: activityHistory.length > 0 ? activityHistory.length : undefined },
     { id: 'knowledge',label: 'Knowledge',badge: knowledgeCount > 0 ? knowledgeCount : undefined },
     { id: 'versions', label: 'Versions' },
@@ -958,6 +960,13 @@ export default function Home() {
                 onInsertCitation={handleInsertCitation}
                 getSelectedText={() => editorRef.current?.getSelectedText() ?? ''}
                 hasSelection={hasSelection}
+              />
+            )}
+            {sidebarTab === 'reviewer' && (
+              <ReviewerPanel
+                getSelectedText={() => editorRef.current?.getSelectedText() ?? ''}
+                hasSelection={hasSelection}
+                onJumpToText={handleJumpToText}
               />
             )}
             {sidebarTab === 'versions' && activeProjectId && (
