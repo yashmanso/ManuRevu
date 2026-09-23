@@ -118,6 +118,7 @@ export default function EvidencePanel({ onFindOpportunities, onInsertCitation, g
       <div className="px-3 py-3 border-b border-neutral-100 dark:border-neutral-700 space-y-2">
         <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
           Add markdown versions of the papers you want to draw on. Everything stays on this machine — matching runs locally, with no API cost.
+          PDFs already in your Reference Vault (Settings → PDF Library) are included in scans automatically.
         </p>
         <div className="flex gap-1.5">
           <Button size="sm" variant="outline" className="text-xs flex-1" disabled={uploading} onClick={() => fileRef.current?.click()}>

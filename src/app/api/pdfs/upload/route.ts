@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
 import { indexPdfFile } from '@/lib/pdf-indexer'
+import { getOrCreateUploadsVaultSource, countPdfsForSource, touchVaultSourceSynced } from '@/lib/settings-store'
+import { apiHandler } from '@/lib/api-handler'
 
 const UPLOAD_DIR = path.join(process.cwd(), 'data', 'pdfs')
 
-export async function POST(req: NextRequest) {
+export const POST = apiHandler(async (req: NextRequest) => {
   const formData = await req.formData()
   const file = formData.get('file') as File | null
   if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
@@ -19,6 +21,11 @@ export async function POST(req: NextRequest) {
   const buffer = Buffer.from(await file.arrayBuffer())
   fs.writeFileSync(dest, buffer)
 
-  await indexPdfFile(dest)
+  // Uploads land in one shared vault source, alongside folder- and
+  // reference-manager-synced PDFs, so there's a single PDF library to browse.
+  const sourceId = getOrCreateUploadsVaultSource(UPLOAD_DIR)
+  await indexPdfFile(dest, sourceId)
+  touchVaultSourceSynced(sourceId, countPdfsForSource(sourceId))
+
   return NextResponse.json({ ok: true, path: dest })
-}
+})

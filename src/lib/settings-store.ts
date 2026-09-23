@@ -58,7 +58,62 @@ function getDb(): Database.Database {
     db.exec('ALTER TABLE pdf_index ADD COLUMN vault_source_id TEXT')
   }
   _db = db
+  migrateLegacyPdfSettings(db)
   return db
+}
+
+/**
+ * The app used to have a single "watched folder" setting, indexed separately
+ * from the Reference Vault's local_folder sources — the same folder-scanning
+ * logic duplicated in two places. Fold any watched folder a user already had
+ * configured into a real vault source so there is one PDF library, then drop
+ * the old setting. Runs once; a no-op after the first call ever finds nothing.
+ */
+function migrateLegacyPdfSettings(db: Database.Database): void {
+  const legacy = db.prepare("SELECT value FROM settings WHERE key = 'pdf_watch_folder'").get() as { value: string } | undefined
+  if (!legacy?.value) return
+  const already = db.prepare("SELECT id FROM vault_sources WHERE type = 'local_folder' AND config_json = ?")
+    .get(JSON.stringify({ folder_path: legacy.value })) as { id: string } | undefined
+  if (!already) {
+    db.prepare(`
+      INSERT INTO vault_sources (id, type, name, config_json, item_count, last_synced_at, created_at)
+      VALUES (?, 'local_folder', 'Watched Folder', ?, 0, NULL, ?)
+    `).run(crypto.randomUUID(), JSON.stringify({ folder_path: legacy.value }), new Date().toISOString())
+  }
+  db.prepare("DELETE FROM settings WHERE key = 'pdf_watch_folder'").run()
+}
+
+const UPLOADS_SOURCE_NAME = 'Uploaded PDFs'
+
+/** The always-available vault source individually-uploaded PDFs land in. */
+export function getOrCreateUploadsVaultSource(folderPath: string): string {
+  const db = getDb()
+  const existing = db.prepare('SELECT id FROM vault_sources WHERE name = ? AND type = ?').get(UPLOADS_SOURCE_NAME, 'local_folder') as { id: string } | undefined
+  if (existing) return existing.id
+  const id = crypto.randomUUID()
+  db.prepare(`
+    INSERT INTO vault_sources (id, type, name, config_json, item_count, last_synced_at, created_at)
+    VALUES (?, 'local_folder', ?, ?, 0, NULL, ?)
+  `).run(id, UPLOADS_SOURCE_NAME, JSON.stringify({ folder_path: folderPath }), new Date().toISOString())
+  return id
+}
+
+export function countPdfsForSource(vaultSourceId: string): number {
+  const db = getDb()
+  return (db.prepare('SELECT COUNT(*) as n FROM pdf_index WHERE vault_source_id = ?').get(vaultSourceId) as { n: number }).n
+}
+
+export interface IndexedPdf {
+  id: string
+  file_path: string
+  title: string | null
+  authors: string | null
+  year: number | null
+  text_excerpt: string | null
+}
+
+export function listAllIndexedPdfs(): IndexedPdf[] {
+  return getDb().prepare('SELECT id, file_path, title, authors, year, text_excerpt FROM pdf_index').all() as IndexedPdf[]
 }
 
 export function getSetting(key: string): string | null {

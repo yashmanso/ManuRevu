@@ -21,6 +21,9 @@ const inputCls = 'w-full border border-neutral-300 dark:border-neutral-600 round
 export default function ReferenceVaultSection() {
   const [sources, setSources] = useState<VaultSource[]>([])
   const [syncingId, setSyncingId] = useState<string | null>(null)
+  const [syncingAll, setSyncingAll] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null)
   const [newType, setNewType] = useState<VaultSourceType>('local_folder')
   const [newName, setNewName] = useState('')
   const [newFolderPath, setNewFolderPath] = useState('')
@@ -33,6 +36,35 @@ export default function ReferenceVaultSection() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const syncAll = async () => {
+    setSyncingAll(true)
+    try {
+      await fetch('/api/pdfs/reindex', { method: 'POST' })
+      load()
+    } finally {
+      setSyncingAll(false)
+    }
+  }
+
+  const uploadPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setUploadStatus('Uploading…')
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      const res = await fetch('/api/pdfs/upload', { method: 'POST', body: form })
+      setUploadStatus(res.ok ? `Indexed: ${file.name}` : 'Upload failed')
+      if (res.ok) load()
+    } catch {
+      setUploadStatus('Upload failed')
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
 
   const addSource = async () => {
     if (!newName.trim()) return
@@ -77,10 +109,26 @@ export default function ReferenceVaultSection() {
 
   return (
     <section className="mb-6">
-      <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-3">Reference Vault</h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-200">PDF Library</h3>
+        {sources.length > 0 && (
+          <Button size="sm" variant="outline" onClick={syncAll} disabled={syncingAll} className="text-xs">
+            {syncingAll ? 'Syncing all…' : 'Sync all'}
+          </Button>
+        )}
+      </div>
       <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-3">
-        Sources of source PDFs used by Citation–Claim verification. Add a local folder, or connect a Zotero, Mendeley, or EndNote library.
+        One place for source PDFs, used by Citation–Claim verification and folded into Evidence Vault scans too.
+        Add a local folder, connect a Zotero, Mendeley, or EndNote library, or upload individual PDFs below.
       </p>
+
+      <div className="mb-3">
+        <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm text-neutral-600 dark:text-neutral-300 hover:border-neutral-500 dark:hover:border-neutral-400 transition-colors">
+          <span>{uploading ? 'Uploading…' : 'Upload PDF…'}</span>
+          <input type="file" accept=".pdf" className="hidden" disabled={uploading} onChange={uploadPdf} />
+        </label>
+        {uploadStatus && <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">{uploadStatus}</span>}
+      </div>
 
       {sources.length > 0 && (
         <div className="space-y-2 mb-3">

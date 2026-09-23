@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
-import { indexPdf, getSetting } from './settings-store'
+import { indexPdf, listAllIndexedPdfs } from './settings-store'
+import type { EvidenceDoc } from './evidence/opportunities'
 
 async function parsePdf(filePath: string): Promise<{ text: string; title?: string }> {
   // Dynamic import to avoid SSR issues
@@ -56,18 +57,21 @@ export async function indexPdfFile(
   }
 }
 
-export async function indexWatchedFolder(): Promise<number> {
-  const folder = getSetting('pdf_watch_folder')
-  if (!folder || !fs.existsSync(folder)) return 0
-
-  const files = fs.readdirSync(folder)
-    .filter(f => f.toLowerCase().endsWith('.pdf'))
-    .map(f => path.join(folder, f))
-
-  let count = 0
-  for (const f of files) {
-    await indexPdfFile(f)
-    count++
-  }
-  return count
+/**
+ * PDFs from the Reference Vault, reshaped as evidence-vault passages so
+ * "Find where to add" draws on both the vault's markdown papers and any PDFs
+ * you've already added — one library, one scan, instead of uploading a paper
+ * twice in two formats.
+ */
+export function pdfsAsEvidenceDocs(): EvidenceDoc[] {
+  return listAllIndexedPdfs()
+    .filter(p => p.text_excerpt && p.text_excerpt.trim().length > 200)
+    .map(p => ({
+      id: `pdf:${p.id}`,
+      filename: path.basename(p.file_path),
+      title: p.title || path.basename(p.file_path),
+      authors: p.authors || '',
+      year: p.year ? String(p.year) : '',
+      content: p.text_excerpt!,
+    }))
 }
