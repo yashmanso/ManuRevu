@@ -5,7 +5,7 @@ import { runLLM } from '@/lib/llm'
 import { resolveCitation } from '@/lib/citations'
 import { getSetting } from '@/lib/settings-store'
 import { apiHandler, readJson } from '@/lib/api-handler'
-import { resolveModel } from '@/lib/models'
+import { resolveModel, type LLMProvider } from '@/lib/models'
 
 const RequestSchema = z.object({
   manuscript: z.string().min(1),
@@ -32,9 +32,10 @@ export const POST = apiHandler(async (
 
   // Skill-level model_override wins; otherwise use the settings-level tier override
   const tierOverride = getSetting(skill.tier === 'structural' ? 'structural_model' : 'writing_model')
-  // resolveModel swaps out ids that have since been retired upstream
-  const modelOverride = resolveModel(skill.tier, skill.model_override ?? tierOverride)
-  const apiKey = getSetting('openrouter_api_key')
+  const provider: LLMProvider = getSetting('llm_provider') === 'anthropic' ? 'anthropic' : 'openrouter'
+  // resolveModel swaps out ids that have since been retired, or belong to the other provider
+  const modelOverride = resolveModel(skill.tier, provider, skill.model_override ?? tierOverride)
+  const apiKey = getSetting(provider === 'anthropic' ? 'anthropic_api_key' : 'openrouter_api_key')
 
   // For two-pass skills (argument-consistency), body contains ---PASS2--- separator
   const passes = skill.body.split(/\n---PASS2---\n/)
@@ -56,6 +57,7 @@ export const POST = apiHandler(async (
       tier: skill.tier,
       model_override: modelOverride,
       apiKey,
+      provider,
       system: pass1Prompt,
       user: userContent1,
     })
@@ -66,6 +68,7 @@ export const POST = apiHandler(async (
       tier: skill.tier,
       model_override: modelOverride,
       apiKey,
+      provider,
       system: pass2Prompt,
       user: userContent2,
     })
@@ -113,6 +116,7 @@ export const POST = apiHandler(async (
       tier: skill.tier,
       model_override: modelOverride,
       apiKey,
+      provider,
       system: skill.body,
       user: userContent,
     })

@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import ReferenceVaultSection from '@/components/settings/ReferenceVaultSection'
-import { MODEL_OPTIONS, resolveModel, modelLabel } from '@/lib/models'
+import { modelOptionsFor, resolveModel, modelLabel, type LLMProvider } from '@/lib/models'
 
 interface Settings {
   citation_backend?: string
   scite_api_key?: string
+  llm_provider?: LLMProvider
   openrouter_api_key?: string
+  anthropic_api_key?: string
   structural_model?: string
   writing_model?: string
 }
@@ -69,44 +71,92 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
         {/* Model tier overrides */}
         <section className="mb-6">
           <h3 className={headingCls}>Models</h3>
-          <div className="mb-3">
-            <label className={labelCls}>Structural model (fast checks)</label>
-            <select
-              value={resolveModel('structural', settings.structural_model)}
-              onChange={e => setSettings(s => ({ ...s, structural_model: e.target.value }))}
-              className={inputCls}
-            >
-              {MODEL_OPTIONS.map(o => <option key={o.id} value={o.id}>{modelLabel(o)}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>Writing model (deep review)</label>
-            <select
-              value={resolveModel('writing', settings.writing_model)}
-              onChange={e => setSettings(s => ({ ...s, writing_model: e.target.value }))}
-              className={inputCls}
-            >
-              {MODEL_OPTIONS.map(o => <option key={o.id} value={o.id}>{modelLabel(o)}</option>)}
-            </select>
-          </div>
-          <p className={hintCls}>Prices shown as input / output per million tokens. Skill-level overrides still take precedence.</p>
 
-          <div className="mt-3">
-            <label className={labelCls}>OpenRouter API Key</label>
-            <input
-              type="password"
-              placeholder="sk-or-…"
-              value={settings.openrouter_api_key ?? ''}
-              onChange={e => setSettings(s => ({ ...s, openrouter_api_key: e.target.value }))}
-              className={`${inputCls} font-mono`}
-            />
-            <p className={hintCls}>
-              Required for any skill that isn&apos;t local (local skills — Long Sentences, Verb Simplification, Word Choice,
-              Article Usage, Reference &amp; Terminology Consistency, Evidence Vault — run with no key needed).
-              Get a key at <span className="font-mono">openrouter.ai/keys</span>. Stored locally in SQLite and sent only to OpenRouter;
-              falls back to the <span className="font-mono">OPENROUTER_API_KEY</span> environment variable if left blank.
-            </p>
+          <div className="mb-3">
+            <label className={labelCls}>Provider</label>
+            <div className="flex gap-2">
+              {(['openrouter', 'anthropic'] as const).map(p => (
+                <button
+                  key={p}
+                  onClick={() => setSettings(s => ({ ...s, llm_provider: p }))}
+                  className={`px-3 py-1.5 rounded-md text-sm border transition-colors ${
+                    (settings.llm_provider ?? 'openrouter') === p
+                      ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-neutral-100 dark:text-neutral-900 dark:border-neutral-100'
+                      : 'bg-white text-neutral-600 border-neutral-300 hover:border-neutral-500 dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-600 dark:hover:border-neutral-400'
+                  }`}
+                >
+                  {p === 'openrouter' ? 'OpenRouter (many models)' : 'Claude API (direct)'}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {(() => {
+            const provider = settings.llm_provider ?? 'openrouter'
+            const options = modelOptionsFor(provider)
+            return (
+              <>
+                <div className="mb-3">
+                  <label className={labelCls}>Structural model (fast checks)</label>
+                  <select
+                    value={resolveModel('structural', provider, settings.structural_model)}
+                    onChange={e => setSettings(s => ({ ...s, structural_model: e.target.value }))}
+                    className={inputCls}
+                  >
+                    {options.map(o => <option key={o.id} value={o.id}>{modelLabel(o)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Writing model (deep review)</label>
+                  <select
+                    value={resolveModel('writing', provider, settings.writing_model)}
+                    onChange={e => setSettings(s => ({ ...s, writing_model: e.target.value }))}
+                    className={inputCls}
+                  >
+                    {options.map(o => <option key={o.id} value={o.id}>{modelLabel(o)}</option>)}
+                  </select>
+                </div>
+                <p className={hintCls}>Prices shown as input / output per million tokens. Skill-level overrides still take precedence.</p>
+
+                {provider === 'anthropic' ? (
+                  <div className="mt-3">
+                    <label className={labelCls}>Claude API Key</label>
+                    <input
+                      type="password"
+                      placeholder="sk-ant-…"
+                      value={settings.anthropic_api_key ?? ''}
+                      onChange={e => setSettings(s => ({ ...s, anthropic_api_key: e.target.value }))}
+                      className={`${inputCls} font-mono`}
+                    />
+                    <p className={hintCls}>
+                      Calls Claude directly — use this if you only have a Claude/Anthropic API key rather than an OpenRouter one.
+                      Get a key at <span className="font-mono">console.anthropic.com</span>. Stored locally in SQLite and sent only to Anthropic;
+                      falls back to the <span className="font-mono">ANTHROPIC_API_KEY</span> environment variable if left blank.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-3">
+                    <label className={labelCls}>OpenRouter API Key</label>
+                    <input
+                      type="password"
+                      placeholder="sk-or-…"
+                      value={settings.openrouter_api_key ?? ''}
+                      onChange={e => setSettings(s => ({ ...s, openrouter_api_key: e.target.value }))}
+                      className={`${inputCls} font-mono`}
+                    />
+                    <p className={hintCls}>
+                      Get a key at <span className="font-mono">openrouter.ai/keys</span>. Stored locally in SQLite and sent only to OpenRouter;
+                      falls back to the <span className="font-mono">OPENROUTER_API_KEY</span> environment variable if left blank.
+                    </p>
+                  </div>
+                )}
+                <p className={hintCls}>
+                  Local skills — Long Sentences, Verb Simplification, Word Choice, Article Usage,
+                  Reference &amp; Terminology Consistency, Evidence Vault — run with no key needed either way.
+                </p>
+              </>
+            )
+          })()}
         </section>
 
         {/* Citation backend */}

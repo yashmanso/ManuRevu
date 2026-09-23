@@ -599,7 +599,7 @@ export default function Home() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       toast.error(`${skill.name} failed`, {
-        description: /OPENROUTER_API_KEY/.test(msg) ? 'OPENROUTER_API_KEY is not set.' : msg.slice(0, 200),
+        description: msg.slice(0, 200),
       })
     } finally {
       setRunStatus('idle')
