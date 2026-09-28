@@ -101,6 +101,9 @@ function SidePanelCard({ item, onAccept, onReject }: { item: SidePanelItem } & P
             {!!p.drifts && (
               <p className="text-xs text-amber-600 dark:text-amber-400">↳ drifts into: {String(p.note ?? '')}</p>
             )}
+            {p.topic_sentence_clear === false && (
+              <p className="text-xs text-purple-600 dark:text-purple-400">⚠ buried topic sentence — the opening line doesn&apos;t give this away</p>
+            )}
           </div>
         ))}
       </div>

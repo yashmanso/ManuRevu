@@ -4,6 +4,9 @@ import { runWordChoiceLocal } from './word-choice'
 import { runArticleUsageLocal } from './article-usage'
 import { runReferenceCheckLocal } from './reference-check'
 import { runTerminologyConsistencyLocal } from './terminology-consistency'
+import { runWeakVerbsLocal } from './weak-verbs'
+import { runPassiveVoiceLocal } from './passive-voice'
+import { runInterruptedSentencesLocal } from './interrupted-sentences'
 import { type LocalIssue } from './types'
 
 export type { LocalIssue } from './types'
@@ -31,6 +34,12 @@ export function runLocalSkill(skillId: string, plainText: string, threshold = 35
       return { issues: runReferenceCheckLocal(plainText) }
     case 'terminology-consistency':
       return { issues: runTerminologyConsistencyLocal(plainText) }
+    case 'weak-verbs':
+      return { issues: runWeakVerbsLocal(plainText) }
+    case 'passive-voice':
+      return { issues: runPassiveVoiceLocal(plainText) }
+    case 'interrupted-sentences':
+      return { issues: runInterruptedSentencesLocal(plainText) }
     default:
       return null
   }

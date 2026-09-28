@@ -38,6 +38,9 @@ export const SKILL_META: Record<string, SkillMeta> = {
   'terminology-consistency': { label: 'Terminology Consistency', color: '#0ea5e9', sidebar: { bg: 'bg-sky-50', border: 'border-sky-200', accent: 'bg-sky-500', label: 'bg-sky-100 text-sky-700' } },
   'reverse-outline':        { label: 'Reverse Outline',        color: '#8b5cf6', sidebar: { bg: 'bg-violet-50', border: 'border-violet-200', accent: 'bg-violet-500', label: 'bg-violet-100 text-violet-700' } },
   'reviewer-response':      { label: 'Reviewer Response',      color: '#db2777', sidebar: { bg: 'bg-fuchsia-50', border: 'border-fuchsia-200', accent: 'bg-fuchsia-500', label: 'bg-fuchsia-100 text-fuchsia-700' } },
+  'weak-verbs':             { label: 'Weak Verbs',             color: '#ca8a04', sidebar: { bg: 'bg-yellow-50', border: 'border-yellow-200', accent: 'bg-yellow-500', label: 'bg-yellow-100 text-yellow-700' } },
+  'passive-voice':          { label: 'Passive Voice',          color: '#475569', sidebar: { bg: 'bg-slate-50', border: 'border-slate-200', accent: 'bg-slate-500', label: 'bg-slate-100 text-slate-700' } },
+  'interrupted-sentences':  { label: 'Interrupted Sentences',  color: '#7c3aed', sidebar: { bg: 'bg-purple-50', border: 'border-purple-200', accent: 'bg-purple-600', label: 'bg-purple-100 text-purple-800' } },
 }
 
 const FALLBACK_SIDEBAR = { bg: 'bg-neutral-50', border: 'border-neutral-200', accent: 'bg-neutral-400', label: 'bg-neutral-100 text-neutral-600' }
@@ -68,7 +71,7 @@ export function skillTint(skillId: string): string {
 
 // Skills that always run in the browser (no LLM) even if the server-side
 // frontmatter flag is missing — kept as a fallback for older skill files.
-export const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-choice', 'article-usage', 'reference-consistency', 'evidence-opportunities', 'terminology-consistency'])
+export const LOCAL_SKILL_IDS = new Set(['long-sentence', 'verb-simplification', 'word-choice', 'article-usage', 'reference-consistency', 'evidence-opportunities', 'terminology-consistency', 'weak-verbs', 'passive-voice', 'interrupted-sentences'])
 
 export function isLocalSkill(skill: Pick<SkillInfo, 'id' | 'local'>): boolean {
   return !!skill.local || LOCAL_SKILL_IDS.has(skill.id)
