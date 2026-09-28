@@ -35,6 +35,16 @@ export function runReferenceCheckLocal(text: string): LocalIssue[] {
     }
   }
 
+  for (const s of result.spelling_mismatches) {
+    const idx = text.indexOf(s.citedVerbatim)
+    issues.push({
+      text: idx !== -1 ? fullSentence(text, idx, s.citedVerbatim.length) : s.citedVerbatim,
+      match: s.citedVerbatim,
+      message: `Cited as "${s.citedAuthor}" (${s.year}), but the reference list spells this author "${s.listedAuthor}" — likely the same source, misspelled in one place.`,
+      suggestion: `Reference list entry: ${s.entry}`,
+    })
+  }
+
   for (const y of result.year_mismatches) {
     const idx = text.indexOf(y.verbatim)
     issues.push({

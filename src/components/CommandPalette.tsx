@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { getSkillMeta, isLocalSkill, type SkillInfo } from '@/lib/skill-meta'
-import { actionInfo, shortcutLabel, paletteShortcutLabel, useIsMac } from '@/lib/action-catalog'
-import { groupSkills, Kbd } from '@/components/ActionsPanel'
+import { actionInfo, modifierParts, useIsMac } from '@/lib/action-catalog'
+import { groupSkills, Kbd, Shortcut, PaletteKey, KeyCombo } from '@/components/ActionsPanel'
 
 interface CommandPaletteProps {
   skills: SkillInfo[]
@@ -83,7 +83,7 @@ export default function CommandPalette({ skills, hasSelection, onRun, onShowcase
                         <span className={`text-[10px] font-semibold shrink-0 ${isLocalSkill(skill) ? 'text-green-600 dark:text-green-400' : 'text-neutral-400'}`}>
                           {isLocalSkill(skill) ? 'FREE' : 'AI'}
                         </span>
-                        <span className="ml-auto shrink-0">{info && <Kbd>{shortcutLabel(info.key, isMac)}</Kbd>}</span>
+                        <span className="ml-auto shrink-0">{info && <Shortcut letter={info.key} isMac={isMac} />}</span>
                       </div>
                       <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 leading-snug line-clamp-2">
                         {needsSelection ? 'Select text in the manuscript first. ' : ''}{info?.tagline ?? skill.description}
@@ -96,10 +96,10 @@ export default function CommandPalette({ skills, hasSelection, onRun, onShowcase
           ))}
         </div>
 
-        <div className="px-4 py-2 border-t border-neutral-100 dark:border-neutral-700 text-[11px] text-neutral-400 flex gap-4">
-          <span><Kbd>{paletteShortcutLabel(isMac)}</Kbd> open this</span>
-          <span><Kbd>{shortcutLabel('letter', isMac)}</Kbd> run an action directly</span>
-          <span><Kbd>/</Kbd> in the manuscript</span>
+        <div className="px-4 py-2 border-t border-neutral-100 dark:border-neutral-700 text-[11px] text-neutral-400 flex items-center gap-4">
+          <span className="flex items-center gap-1.5"><PaletteKey isMac={isMac} /> open this</span>
+          <span className="flex items-center gap-1.5"><KeyCombo parts={modifierParts(isMac)} /> + letter runs one directly</span>
+          <span className="flex items-center gap-1.5"><Kbd>/</Kbd> in the manuscript</span>
           <span className="ml-auto">FREE actions run locally · AI actions use your API key</span>
         </div>
       </div>

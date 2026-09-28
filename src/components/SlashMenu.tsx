@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { isLocalSkill, type SkillInfo } from '@/lib/skill-meta'
-import { actionInfo, shortcutLabel, useIsMac } from '@/lib/action-catalog'
-import { Kbd } from '@/components/ActionsPanel'
+import { actionInfo, useIsMac } from '@/lib/action-catalog'
+import { Shortcut } from '@/components/ActionsPanel'
 
 interface SlashMenuProps {
   skills: SkillInfo[]
@@ -88,7 +88,7 @@ export default function SlashMenu({ skills, hasSelection, position, query, onSel
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{skill.name}</span>
               <span className="flex items-center gap-1.5">
-                {actionInfo(skill.id) && <Kbd>{shortcutLabel(actionInfo(skill.id)!.key, isMac)}</Kbd>}
+                {actionInfo(skill.id) && <Shortcut letter={actionInfo(skill.id)!.key} isMac={isMac} />}
                 {onEditPrompt && (
                   <span
                     role="button"

@@ -4,9 +4,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import ChangePreview from '@/components/ChangePreview'
 import { getSkillMeta, isLocalSkill, withAlpha, type SkillInfo } from '@/lib/skill-meta'
-import { actionInfo, shortcutLabel, useIsMac, type ExampleFinding } from '@/lib/action-catalog'
+import { actionInfo, useIsMac, type ExampleFinding } from '@/lib/action-catalog'
 import { runLocalSkill, type LocalIssue } from '@/lib/local-skills/index'
-import { groupSkills, Kbd } from '@/components/ActionsPanel'
+import { groupSkills, Shortcut } from '@/components/ActionsPanel'
 
 interface ActionShowcaseProps {
   skills: SkillInfo[]
@@ -118,7 +118,7 @@ export default function ActionShowcase({ skills, initialSkillId, onRun, onClose 
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="w-2.5 h-2.5 rounded-full" style={{ background: meta.color }} />
                 <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">{current.name}</h2>
-                {info && <Kbd>{shortcutLabel(info.key, isMac)}</Kbd>}
+                {info && <Shortcut letter={info.key} isMac={isMac} />}
                 <span className={`text-[11px] px-1.5 py-0.5 rounded-full border ${local ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800' : 'bg-neutral-50 text-neutral-600 border-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-600'}`}>
                   {local ? 'Free · runs on this computer' : 'AI · uses your API key'}
                 </span>

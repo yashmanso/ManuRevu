@@ -79,8 +79,8 @@ export const ACTIONS: Record<string, ActionInfo> = {
   },
   'reference-consistency': {
     key: 'R', category: 'consistency',
-    tagline: 'Checks in-text citations against your reference list — missing, unused, duplicated, wrong year.',
-    sample: 'Psychological safety predicts learning (Edmondson, 1999). New ventures face a liability of newness (Stinchcombe, 1965).\n\nReferences\nEdmondson, A. (1998). Psychological safety and learning behavior in work teams. Administrative Science Quarterly, 44(2), 350–383.\nZimmerman, M., & Zeitz, G. (2002). Beyond survival. Academy of Management Review, 27(3), 414–431.',
+    tagline: 'Checks in-text citations against your reference list — missing, unused, duplicated, wrong year, or misspelled.',
+    sample: 'Psychological safety predicts learning (Edmondson, 1999). New ventures face a liability of newness (Stinchcomb, 1965).\n\nReferences\nEdmondson, A. (1998). Psychological safety and learning behavior in work teams. Administrative Science Quarterly, 44(2), 350–383.\nStinchcombe, A. (1965). Social structure and organizations. Handbook of Organizations, 142–193.\nZimmerman, M., & Zeitz, G. (2002). Beyond survival. Academy of Management Review, 27(3), 414–431.',
   },
 
   // ── Evidence & citations ───────────────────────────────────────────────────
@@ -217,4 +217,20 @@ export function shortcutLabel(key: string, isMac: boolean): string {
 
 export function paletteShortcutLabel(isMac: boolean): string {
   return isMac ? '⌘K' : 'Ctrl+K'
+}
+
+/** Each physical key as its own piece, for rendering as separate <kbd> chips
+ *  instead of one string — ⌥⇧A squished into a single monospace run reads as
+ *  a garbled icon rather than three distinct keys. */
+export function shortcutParts(key: string, isMac: boolean): string[] {
+  return isMac ? ['⌥', '⇧', key] : ['Alt', 'Shift', key]
+}
+
+/** Just the modifiers, for "⌥⇧ + letter runs an action"-style hints with no fixed letter. */
+export function modifierParts(isMac: boolean): string[] {
+  return isMac ? ['⌥', '⇧'] : ['Alt', 'Shift']
+}
+
+export function paletteShortcutParts(isMac: boolean): string[] {
+  return isMac ? ['⌘', 'K'] : ['Ctrl', 'K']
 }

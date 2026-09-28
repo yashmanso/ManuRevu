@@ -1,6 +1,6 @@
 import type { TourStep } from '@/components/GuidedTour'
-import { Kbd } from '@/components/ActionsPanel'
-import { shortcutLabel, paletteShortcutLabel } from '@/lib/action-catalog'
+import { Kbd, Shortcut, PaletteKey, KeyCombo } from '@/components/ActionsPanel'
+import { modifierParts } from '@/lib/action-catalog'
 
 export function buildTourSteps(isMac: boolean): TourStep[] {
   return [
@@ -39,7 +39,9 @@ export function buildTourSteps(isMac: boolean): TourStep[] {
       body: (
         <>
           <p>All actions, grouped by what they do. Click one to run it on your manuscript.</p>
-          <p>Each has a shortcut: hold <Kbd>{isMac ? '⌥ Option' : 'Alt'}</Kbd> + <Kbd>{isMac ? '⇧ Shift' : 'Shift'}</Kbd> and press its letter, e.g. <Kbd>{shortcutLabel('E', isMac)}</Kbd> for Weak Verbs.</p>
+          <p className="flex flex-wrap items-center gap-1.5">
+            Each has a shortcut: hold <KeyCombo parts={modifierParts(isMac)} /> and press its letter, e.g. <Shortcut letter="E" isMac={isMac} /> for Weak Verbs.
+          </p>
           <p><b>AI</b> marks actions that use your API key; the rest are free and run on this computer. Hover an action and click <b>?</b> to see what it does.</p>
         </>
       ),
@@ -47,7 +49,11 @@ export function buildTourSteps(isMac: boolean): TourStep[] {
     {
       target: 'palette-button', placement: 'bottom',
       title: 'See them all at once',
-      body: <p>Press <Kbd>{paletteShortcutLabel(isMac)}</Kbd> (or click here) for a grid of every action with a one-line explanation. Type to filter, Enter to run.</p>,
+      body: (
+        <p className="flex flex-wrap items-center gap-1.5">
+          Press <PaletteKey isMac={isMac} /> (or click here) for a grid of every action with a one-line explanation. Type to filter, Enter to run.
+        </p>
+      ),
     },
     {
       target: 'stats', placement: 'bottom',

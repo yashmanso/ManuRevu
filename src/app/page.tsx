@@ -31,7 +31,8 @@ import ActionShowcase from '@/components/ActionShowcase'
 import GuidedTour from '@/components/GuidedTour'
 import { buildTourSteps } from '@/components/tour-steps'
 import { isLocalSkill, skillHighlight, type SkillInfo } from '@/lib/skill-meta'
-import { skillIdForCode, paletteShortcutLabel, useIsMac } from '@/lib/action-catalog'
+import { skillIdForCode, useIsMac } from '@/lib/action-catalog'
+import { PaletteKey } from '@/components/ActionsPanel'
 
 // Editor uses browser APIs — load client-side only
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false })
@@ -925,7 +926,7 @@ export default function Home() {
             <input ref={fileInputRef} type="file" accept=".docx,.txt,.md" className="hidden" onChange={handleFileUpload} />
             <Button data-tour="palette-button" size="sm" variant="outline" className="text-xs gap-1.5" onClick={() => setPaletteOpen(true)}>
               All actions
-              <kbd className="text-[10px] font-mono text-neutral-400">{paletteShortcutLabel(isMac)}</kbd>
+              <PaletteKey isMac={isMac} />
             </Button>
             <Button data-tour="settings" size="sm" variant="outline" onClick={() => setShowSettings(true)} className="text-xs">
               Settings
@@ -982,23 +983,23 @@ export default function Home() {
         </div>
 
         {/* ── Right sidebar ──────────────────────────────────────────────── */}
-        <div data-tour="sidebar" className="w-80 shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex flex-col overflow-hidden">
-          {/* Tabs */}
-          <div data-tour="tabs" className="flex border-b border-neutral-200 dark:border-neutral-700 shrink-0">
+        <div data-tour="sidebar" className="w-[22rem] shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex flex-col overflow-hidden">
+          {/* Tabs — chip-style and wrapping, so a 6th tab never gets clipped at a fixed panel width */}
+          <div data-tour="tabs" className="flex flex-wrap gap-1 px-2.5 py-2 border-b border-neutral-200 dark:border-neutral-700 shrink-0 bg-neutral-50/50 dark:bg-neutral-950/40">
             {TAB_META.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setSidebarTab(tab.id)}
-                className={`flex-1 flex items-center justify-center gap-1 px-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
                   sidebarTab === tab.id
-                    ? 'border-neutral-800 dark:border-neutral-200 text-neutral-900 dark:text-neutral-100'
-                    : 'border-transparent text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300'
+                    ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 shadow-sm'
+                    : 'text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200/70 dark:hover:bg-neutral-800'
                 }`}
               >
                 {tab.label}
                 {tab.badge != null && (
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                    sidebarTab === tab.id ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400'
+                  <span className={`text-[10px] leading-none px-1.5 py-0.5 rounded-full font-semibold ${
+                    sidebarTab === tab.id ? 'bg-white/25 text-white dark:bg-black/10 dark:text-neutral-900' : 'bg-neutral-200 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300'
                   }`}>
                     {tab.badge}
                   </span>
@@ -1007,7 +1008,7 @@ export default function Home() {
             ))}
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto min-h-0">
             {sidebarTab === 'review' && (
               <ReviewSidebar suggestions={suggestions} activeId={activeSuggestionId} onAccept={handleAccept} onReject={handleReject} onJumpTo={handleJumpTo} onSaveToKnowledge={handleSaveToKnowledge} />
             )}

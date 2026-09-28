@@ -1,6 +1,6 @@
 'use client'
 
-import { paletteShortcutLabel, shortcutLabel, useIsMac } from '@/lib/action-catalog'
+import { paletteShortcutLabel, useIsMac } from '@/lib/action-catalog'
 
 type SaveState = 'idle' | 'saving' | 'saved'
 type RunStatus = 'idle' | 'running'
@@ -44,7 +44,7 @@ export default function AppStatusBar({ saveState, runStatus, activeRunLabel, wor
             Running <span className="font-semibold">{activeRunLabel}</span>…
           </span>
         ) : (
-          <span className="text-neutral-300 dark:text-neutral-600">{paletteShortcutLabel(isMac)} all actions · {shortcutLabel('letter', isMac)} run one · / in the text</span>
+          <span className="text-neutral-300 dark:text-neutral-600">{paletteShortcutLabel(isMac)} for all actions · / in the text</span>
         )}
       </div>
 

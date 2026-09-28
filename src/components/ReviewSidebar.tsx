@@ -160,8 +160,12 @@ function SkillGroup({ skillId, items, defaultOpen = true, activeId, onAccept, on
 export default function ReviewSidebar({ suggestions, activeId, onAccept, onReject, onJumpTo, onSaveToKnowledge }: ReviewSidebarProps) {
   if (suggestions.length === 0) {
     return (
-      <div className="p-6 text-sm text-neutral-400 dark:text-neutral-500 text-center mt-8 leading-relaxed">
-        Run a skill with <kbd className="px-1 py-0.5 bg-neutral-100 dark:bg-neutral-700 dark:text-neutral-300 rounded text-xs font-mono">/</kbd> to see suggestions here.
+      <div className="flex flex-col items-center gap-2 px-6 pt-16 text-center">
+        <span className="w-10 h-10 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-lg text-neutral-300 dark:text-neutral-600">✓</span>
+        <p className="text-sm text-neutral-400 dark:text-neutral-500 leading-relaxed max-w-[220px]">
+          Nothing to review yet. Run an action from the left, or press{' '}
+          <kbd className="px-1 py-0.5 bg-neutral-100 dark:bg-neutral-700 dark:text-neutral-300 rounded text-xs font-mono">/</kbd> in the text.
+        </p>
       </div>
     )
   }

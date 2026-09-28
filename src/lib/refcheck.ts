@@ -25,12 +25,36 @@ export interface YearMismatch {
   verbatim: string      // one in-text occurrence with the mismatched year, for jump
 }
 
+export interface SpellingMismatch {
+  citedAuthor: string   // surname as it appears in-text
+  citedVerbatim: string // exact in-text occurrence, for jump
+  listedAuthor: string  // surname as spelled in the reference list
+  entry: string         // the bibliography entry, verbatim
+  year: string
+}
+
 export interface RefCheckResult {
   cited_not_listed: CitedNotListed[]
   listed_not_cited: ListedNotCited[]
   duplicate_entries: DuplicateEntry[]
   year_mismatches: YearMismatch[]
+  spelling_mismatches: SpellingMismatch[]
   bibliography_parse_errors: string[]
+}
+
+/** Edit distance — small values catch a typo'd surname without a full spellchecker. */
+function levenshtein(a: string, b: string): number {
+  const dp: number[][] = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0))
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1])
+    }
+  }
+  return dp[a.length][b.length]
 }
 
 interface InlineOccurrence {
@@ -205,5 +229,43 @@ export function runRefCheck(manuscriptText: string): RefCheckResult {
     if (verbatimEntries.length > 1) duplicate_entries.push({ key, entries: verbatimEntries })
   }
 
-  return { cited_not_listed, listed_not_cited, duplicate_entries, year_mismatches, bibliography_parse_errors: errors }
+  // Likely misspellings: an in-text author with no bib match, and a bib
+  // author never cited, sharing the same year and near-identical spelling.
+  // Each such pair is really one typo, not two unrelated discrepancies, so
+  // it's pulled out of both lists into its own category.
+  const spelling_mismatches: SpellingMismatch[] = []
+  const usedListedIdx = new Set<number>()
+  const remaining_cited_not_listed: CitedNotListed[] = []
+  for (const c of cited_not_listed) {
+    const occ = inlineOccurrences.find(o => o.verbatim === c.verbatim && o.key === c.key)
+    const citedAuthor = occ?.author ?? c.key.split(',')[0]
+    const citedYear = occ?.year ?? c.key.match(/(?:1[89]|20)\d{2}[a-z]?/)?.[0] ?? ''
+    const threshold = citedAuthor.length <= 4 ? 1 : 2
+    let best: { idx: number; author: string; dist: number } | null = null
+    listed_not_cited.forEach((l, idx) => {
+      if (usedListedIdx.has(idx)) return
+      const parsed = parseBibEntryKey(l.entry)
+      if (!parsed || parsed.year !== citedYear) return
+      const dist = levenshtein(citedAuthor.toLowerCase(), parsed.author.toLowerCase())
+      if (dist === 0 || dist > threshold) return
+      if (!best || dist < best.dist) best = { idx, author: parsed.author, dist }
+    })
+    if (best) {
+      const b: { idx: number; author: string; dist: number } = best
+      usedListedIdx.add(b.idx)
+      spelling_mismatches.push({ citedAuthor, citedVerbatim: c.verbatim, listedAuthor: b.author, entry: listed_not_cited[b.idx].entry, year: citedYear })
+    } else {
+      remaining_cited_not_listed.push(c)
+    }
+  }
+  const remaining_listed_not_cited = listed_not_cited.filter((_, idx) => !usedListedIdx.has(idx))
+
+  return {
+    cited_not_listed: remaining_cited_not_listed,
+    listed_not_cited: remaining_listed_not_cited,
+    duplicate_entries,
+    year_mismatches,
+    spelling_mismatches,
+    bibliography_parse_errors: errors,
+  }
 }
