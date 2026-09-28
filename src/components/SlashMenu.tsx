@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { isLocalSkill, type SkillInfo } from '@/lib/skill-meta'
+import { actionInfo, shortcutLabel, useIsMac } from '@/lib/action-catalog'
+import { Kbd } from '@/components/ActionsPanel'
 
 interface SlashMenuProps {
   skills: SkillInfo[]
@@ -16,6 +18,7 @@ interface SlashMenuProps {
 
 export default function SlashMenu({ skills, hasSelection, position, query, onSelect, onClose, onEditPrompt }: SlashMenuProps) {
   const rootRef = useRef<HTMLDivElement>(null)
+  const isMac = useIsMac()
   const [activeIndex, setActiveIndex] = useState(0)
   // Reset the highlighted item whenever the filter query changes. Done by
   // comparing against the previous query during render (the React-recommended
@@ -85,6 +88,7 @@ export default function SlashMenu({ skills, hasSelection, position, query, onSel
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{skill.name}</span>
               <span className="flex items-center gap-1.5">
+                {actionInfo(skill.id) && <Kbd>{shortcutLabel(actionInfo(skill.id)!.key, isMac)}</Kbd>}
                 {onEditPrompt && (
                   <span
                     role="button"

@@ -18,7 +18,7 @@ const WORD_MAP: WordEntry[] = [
   },
   {
     pattern: /\butiliz(e|es|ed|ing)\b/gi,
-    replace: (m) => ({ e: 'use', es: 'uses', ed: 'used', ing: 'using' } as Record<string, string>)[m.slice(7).toLowerCase()] ?? 'use',
+    replace: (m) => ({ e: 'use', es: 'uses', ed: 'used', ing: 'using' } as Record<string, string>)[m.slice(6).toLowerCase()] ?? 'use',
     explanation: '"Utilize" rarely adds meaning over "use".',
     suggestion: 'use',
   },

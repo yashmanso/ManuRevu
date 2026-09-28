@@ -27,7 +27,7 @@ export default function ChangePreview({ before, after, className = '' }: { befor
     <p className={`text-xs leading-relaxed break-words text-neutral-500 dark:text-neutral-400 ${className}`}>
       {lead}
       {removed && <span className="text-red-600 dark:text-red-400 line-through decoration-red-400">{removed}</span>}
-      {added && <span className="text-green-700 dark:text-green-400 font-medium bg-green-50 dark:bg-green-950/40 rounded-sm">{added}</span>}
+      {added && <span className={`text-green-700 dark:text-green-400 font-medium bg-green-50 dark:bg-green-950/40 rounded-sm${removed ? ' ml-1' : ''}`}>{added}</span>}
       {tail}
     </p>
   )

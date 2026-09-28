@@ -1,5 +1,7 @@
 'use client'
 
+import { paletteShortcutLabel, shortcutLabel, useIsMac } from '@/lib/action-catalog'
+
 type SaveState = 'idle' | 'saving' | 'saved'
 type RunStatus = 'idle' | 'running'
 
@@ -12,6 +14,7 @@ interface AppStatusBarProps {
 }
 
 export default function AppStatusBar({ saveState, runStatus, activeRunLabel, wordCount, selectionWords }: AppStatusBarProps) {
+  const isMac = useIsMac()
   return (
     <div className="shrink-0 flex items-center justify-between px-6 py-1 bg-neutral-100 dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-700 text-xs text-neutral-500 dark:text-neutral-400 select-none">
       {/* Left: save state */}
@@ -41,7 +44,7 @@ export default function AppStatusBar({ saveState, runStatus, activeRunLabel, wor
             Running <span className="font-semibold">{activeRunLabel}</span>…
           </span>
         ) : (
-          <span className="text-neutral-300 dark:text-neutral-600">Type / to run a skill</span>
+          <span className="text-neutral-300 dark:text-neutral-600">{paletteShortcutLabel(isMac)} all actions · {shortcutLabel('letter', isMac)} run one · / in the text</span>
         )}
       </div>
 

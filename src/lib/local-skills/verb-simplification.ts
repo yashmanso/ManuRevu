@@ -12,13 +12,13 @@ interface VerbEntry {
 const VERB_MAP: VerbEntry[] = [
   {
     pattern: /\butiliz(e|es|ed|ing)\b/gi,
-    replace: (m) => ({ e: 'use', es: 'uses', ed: 'used', ing: 'using' } as Record<string, string>)[m.slice(7).toLowerCase()] ?? 'use',
+    replace: (m) => ({ e: 'use', es: 'uses', ed: 'used', ing: 'using' } as Record<string, string>)[m.slice(6).toLowerCase()] ?? 'use',
     simpler: 'use',
     explanation: '"Use" is shorter and equally precise.',
   },
   {
     pattern: /\bcommenc(e|es|ed|ing)\b/gi,
-    replace: (m) => ({ e: 'begin', es: 'begins', ed: 'began', ing: 'beginning' } as Record<string, string>)[m.slice(8).toLowerCase()] ?? 'begin',
+    replace: (m) => ({ e: 'begin', es: 'begins', ed: 'began', ing: 'beginning' } as Record<string, string>)[m.slice(7).toLowerCase()] ?? 'begin',
     simpler: 'begin',
     explanation: '"Commence" is unnecessarily formal.',
   },

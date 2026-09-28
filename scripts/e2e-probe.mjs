@@ -8,6 +8,8 @@ const check = (name, ok, detail = "") => { (ok ? pass : fail).push(`${name}${det
 
 const browser = await chromium.launch({ executablePath: EXEC, args: ['--no-sandbox'] })
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } })
+// The first-visit tour would cover the app; it gets its own check below
+await page.addInitScript(() => localStorage.setItem('manurevu.tourSeen', '1'))
 const errors = []
 page.on('pageerror', e => errors.push(e.message))
 page.on('response', r => { if (r.status() >= 500) errors.push(`${r.status()} ${r.url()}`) })
@@ -73,7 +75,7 @@ await page.waitForTimeout(250)
 check('Escape dismisses the menu', (await page.locator('div.fixed.z-50').count()) === 0)
 
 // ---- 6. Project switching must not lose the last edits ----
-const sidebar = page.locator('.w-52')
+const sidebar = page.locator('[data-tour="projects"]')
 const projCount = await sidebar.locator('[role="button"]').count()
 if (projCount >= 1) {
   // create a second project
@@ -162,6 +164,63 @@ await page.locator('button', { hasText: 'Insert citation' }).first().click()
 await page.waitForTimeout(400)
 check('Insert citation lands at the cursor', (await editor.innerText()).trimEnd().endsWith('(Edmondson, 1999)'))
 await cleanupFixtures()
+
+// ---- 8. Every action visible at once, with shortcuts ----
+const skillCount = await page.evaluate(async () => (await (await fetch('/api/skills')).json()).length)
+const panelRows = page.locator('[data-tour="actions"] button[title]').filter({ has: page.locator('kbd') })
+check('actions panel lists every action with a shortcut', (await panelRows.count()) === skillCount, `${await panelRows.count()}/${skillCount}`)
+
+// ---- 9. Alt+Shift+letter runs an action and types nothing ----
+await setText('The committee made a decision quickly. ')
+const cardsBefore = await page.locator('[data-suggestion-card]').count()
+await page.keyboard.press('Alt+Shift+KeyE')
+await page.waitForTimeout(800)
+const afterShortcut = await editor.innerText()
+check('⌥⇧E runs Weak Verbs', (await page.locator('[data-suggestion-card]').count()) > cardsBefore)
+check('shortcut inserts no character into the manuscript', afterShortcut.trim() === 'The committee made a decision quickly.', JSON.stringify(afterShortcut))
+
+// ---- 10. Selection-only action via shortcut, with nothing selected ----
+await editor.click()
+await page.keyboard.press('End')
+await page.keyboard.press('Alt+Shift+KeyK')
+await page.waitForTimeout(400)
+check('selection-only action asks for a selection instead of running', await page.locator('text=works on selected text').count() > 0)
+
+// ---- 11. Palette: all actions at once, filter, Enter runs ----
+await setText('The data were analyzed carefully. ')
+await page.keyboard.press('Control+KeyK')
+await page.waitForTimeout(300)
+const palette = page.locator('[role="dialog"][aria-label="All actions"]')
+check('Ctrl/⌘K opens the all-actions palette', await palette.count() === 1)
+check('palette shows every action at once', (await palette.locator('button kbd').count()) === skillCount, `${await palette.locator('button kbd').count()}/${skillCount}`)
+await page.keyboard.type('passive')
+await page.keyboard.press('Enter')
+await page.waitForTimeout(800)
+check('palette filter + Enter runs the match', await palette.count() === 0 && await page.locator('[data-suggestion-card]', { hasText: 'Passive voice' }).count() >= 1)
+
+// ---- 12. Showcase: live result on a sample ----
+await page.locator('button', { hasText: /^Showcase$/ }).first().click()
+await page.waitForTimeout(300)
+const showcase = page.locator('[role="dialog"][aria-label="Action showcase"]')
+check('showcase opens', await showcase.count() === 1)
+await showcase.locator('nav button', { hasText: 'Weak Verbs' }).click()
+check('showcase runs a local action live on its sample', await showcase.locator('text=/live result \\((\\d+)\\)/').count() === 1 && await showcase.locator('mark').count() >= 3)
+await showcase.locator('nav button', { hasText: 'Reverse Outline' }).click()
+check('showcase shows a worked example for AI actions', await showcase.locator('text=illustrative example').count() === 1)
+await page.keyboard.press('Escape')
+
+// ---- 13. Guided tour on first visit ----
+const fresh = await browser.newPage({ viewport: { width: 1400, height: 900 } })
+await fresh.goto(URL, { waitUntil: 'networkidle' })
+await fresh.waitForTimeout(1500)
+const tour = fresh.locator('text=Welcome to ManuRevu')
+check('tour starts on first visit', await tour.count() === 1)
+let steps = 0
+while (await fresh.locator('button', { hasText: /^Next$/ }).count() && steps < 20) { await fresh.locator('button', { hasText: /^Next$/ }).click(); steps++; await fresh.waitForTimeout(150) }
+check('tour walks every step to the end', await fresh.locator('text=You’re set').count() === 1, `${steps + 1} steps`)
+await fresh.locator('button', { hasText: 'Skip tour' }).click()
+check('tour is remembered after closing', await fresh.evaluate(() => localStorage.getItem('manurevu.tourSeen')) === '1')
+await fresh.close()
 
 console.log('\nPASS:'); pass.forEach(p => console.log('  ✓', p))
 console.log('\nFAIL:')

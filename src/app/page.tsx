@@ -25,7 +25,13 @@ import { runLocalSkill, type LocalIssue } from '@/lib/local-skills/index'
 import EvidencePanel from '@/components/EvidencePanel'
 import ReviewerPanel from '@/components/ReviewerPanel'
 import AnnotationPopover from '@/components/AnnotationPopover'
+import ActionsPanel from '@/components/ActionsPanel'
+import CommandPalette from '@/components/CommandPalette'
+import ActionShowcase from '@/components/ActionShowcase'
+import GuidedTour from '@/components/GuidedTour'
+import { buildTourSteps } from '@/components/tour-steps'
 import { isLocalSkill, skillHighlight, type SkillInfo } from '@/lib/skill-meta'
+import { skillIdForCode, paletteShortcutLabel, useIsMac } from '@/lib/action-catalog'
 
 // Editor uses browser APIs — load client-side only
 const Editor = dynamic(() => import('@/components/Editor'), { ssr: false })
@@ -90,10 +96,10 @@ export default function Home() {
   // never accumulated from keystrokes — that drifts out of sync with the text.
   const [slash, setSlash] = useState<SlashContext | null>(null)
   const [slashDismissed, setSlashDismissed] = useState(false)
-  const [actionsMenu, setActionsMenu] = useState<{ open: boolean; position: { top: number; left: number } }>({
-    open: false, position: { top: 0, left: 0 },
-  })
-  const actionsButtonRef = useRef<HTMLButtonElement>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [showcase, setShowcase] = useState<{ skillId?: string } | null>(null)
+  const [tourOpen, setTourOpen] = useState(false)
+  const isMac = useIsMac()
   const [hasSelection, setHasSelection] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('review')
@@ -608,9 +614,9 @@ export default function Home() {
   }, [addActivity, saveAutoVersion])
 
   const runSkill = useCallback(async (skill: Skill) => {
-    setActionsMenu(m => ({ ...m, open: false }))
+    setPaletteOpen(false)
     // Removes the typed "/query" if one is pending; no-op when launched from
-    // the Actions menu. Clearing it also collapses the slash context, which
+    // the actions panel, palette or a shortcut. Clearing it also collapses the slash context, which
     // closes the menu.
     editorRef.current?.clearSlashQuery()
 
@@ -789,6 +795,57 @@ export default function Home() {
     else toast.error('Evidence Opportunities skill not found', { description: 'skills/evidence-opportunities.md is missing.' })
   }, [skills, runSkill])
 
+  // ── Launching actions: panel, palette, showcase and keyboard shortcuts ──────
+  const launchSkill = useCallback((skill: Skill) => {
+    setPaletteOpen(false)
+    setShowcase(null)
+    if (skill.scope === 'selection' && !editorRef.current?.getSelectedText()) {
+      toast.warning(`${skill.name} works on selected text`, { description: 'Select a passage in the manuscript, then run it again.' })
+      return
+    }
+    void runSkill(skill)
+  }, [runSkill])
+
+  const modalOpen = showSettings || !!pendingPreview || !!editPromptSkill || !!showcase || tourOpen
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // ⌘K / Ctrl+K: every action at once
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.code === 'KeyK') {
+        if (modalOpen) return
+        e.preventDefault(); e.stopPropagation()
+        setPaletteOpen(o => !o)
+        return
+      }
+      // ⌥⇧ / Alt+Shift + letter: run that action. Matched on e.code, since on a
+      // Mac Option changes e.key into a special character. Capture phase +
+      // preventDefault keeps that character out of the manuscript.
+      if (e.altKey && e.shiftKey && !e.metaKey && !e.ctrlKey) {
+        const id = skillIdForCode(e.code)
+        const skill = id && skills.find(s => s.id === id)
+        if (!skill) return
+        e.preventDefault(); e.stopPropagation()
+        if (!modalOpen) launchSkill(skill)
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [skills, launchSkill, modalOpen])
+
+  // First visit: walk through the platform once
+  useEffect(() => {
+    if (!skills.length) return
+    let seen = true
+    try { seen = localStorage.getItem('manurevu.tourSeen') === '1' } catch { /* storage blocked — don't nag */ }
+    if (seen) return
+    const t = setTimeout(() => setTourOpen(true), 600)
+    return () => clearTimeout(t)
+  }, [skills.length])
+
+  const closeTour = useCallback(() => {
+    setTourOpen(false)
+    try { localStorage.setItem('manurevu.tourSeen', '1') } catch { /* ignore */ }
+  }, [])
+
   const handleInsertCitation = useCallback((cite: string) => {
     // At the cursor, with a leading space unless one is already there
     const inserted = editorRef.current?.insertAtCursor(`(${cite})`, { spaceBefore: true })
@@ -833,16 +890,26 @@ export default function Home() {
     <div className="flex flex-col h-screen bg-neutral-50 dark:bg-neutral-950 overflow-hidden">
       <div className="flex flex-1 overflow-hidden">
 
-        {/* ── Left project sidebar ───────────────────────────────────────── */}
-        <div className="w-52 shrink-0 overflow-hidden">
-          <ProjectSidebar
-            projects={projects}
-            activeId={activeProjectId}
-            onSelect={switchProject}
-            onCreate={handleCreateProject}
-            onRename={handleRenameProject}
-            onDelete={handleDeleteProject}
-          />
+        {/* ── Left column: projects + every action ───────────────────────── */}
+        <div className="w-60 shrink-0 flex flex-col overflow-hidden">
+          <div data-tour="projects" className="h-[32%] min-h-[130px] shrink-0 overflow-hidden border-b border-neutral-200 dark:border-neutral-700">
+            <ProjectSidebar
+              projects={projects}
+              activeId={activeProjectId}
+              onSelect={switchProject}
+              onCreate={handleCreateProject}
+              onRename={handleRenameProject}
+              onDelete={handleDeleteProject}
+            />
+          </div>
+          <div data-tour="actions" className="flex-1 min-h-0 overflow-hidden">
+            <ActionsPanel
+              skills={skills}
+              hasSelection={hasSelection}
+              onRun={launchSkill}
+              onShowcase={skillId => setShowcase({ skillId })}
+            />
+          </div>
         </div>
 
         {/* ── Main editor area ───────────────────────────────────────────── */}
@@ -852,28 +919,22 @@ export default function Home() {
             <span className="font-semibold text-neutral-800 dark:text-neutral-100 tracking-tight">
               {activeProject ? (activeProject.name || activeProject.title || 'Untitled') : 'ManuRevu'}
             </span>
-            <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="text-xs">
+            <Button data-tour="import" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="text-xs">
               Import
             </Button>
             <input ref={fileInputRef} type="file" accept=".docx,.txt,.md" className="hidden" onChange={handleFileUpload} />
-            <Button
-              ref={actionsButtonRef}
-              size="sm"
-              variant="outline"
-              className="text-xs"
-              onClick={() => {
-                const rect = actionsButtonRef.current?.getBoundingClientRect()
-                if (!rect) return
-                setActionsMenu(m => ({
-                  open: !m.open,
-                  position: { top: rect.bottom + 6, left: rect.left },
-                }))
-              }}
-            >
-              Actions
+            <Button data-tour="palette-button" size="sm" variant="outline" className="text-xs gap-1.5" onClick={() => setPaletteOpen(true)}>
+              All actions
+              <kbd className="text-[10px] font-mono text-neutral-400">{paletteShortcutLabel(isMac)}</kbd>
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowSettings(true)} className="text-xs">
+            <Button data-tour="settings" size="sm" variant="outline" onClick={() => setShowSettings(true)} className="text-xs">
               Settings
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowcase({})} className="text-xs">
+              Showcase
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setTourOpen(true)} className="text-xs">
+              Tour
             </Button>
             <button
               onClick={() => setDarkMode(d => !d)}
@@ -893,6 +954,7 @@ export default function Home() {
             </label>
           </div>
 
+          <div data-tour="stats" className="shrink-0">
           <StatsBar stats={stats} threshold={longSentenceThreshold} onThresholdChange={setLongSentenceThreshold} />
           <SectionsStrip
             sections={sections}
@@ -903,9 +965,10 @@ export default function Home() {
             onSelectAll={() => setSelectedSectionIds(new Set(sections.map(s => s.id)))}
             onJumpTo={s => editorRef.current?.scrollToHeading(s.title)}
           />
+          </div>
 
           {/* Editor */}
-          <div className="flex-1 overflow-y-auto px-8 py-6 bg-neutral-50 dark:bg-neutral-950">
+          <div data-tour="editor" className="flex-1 overflow-y-auto px-8 py-6 bg-neutral-50 dark:bg-neutral-950">
             <Editor
               ref={editorRef}
               onChange={handleEditorChange}
@@ -919,9 +982,9 @@ export default function Home() {
         </div>
 
         {/* ── Right sidebar ──────────────────────────────────────────────── */}
-        <div className="w-80 shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex flex-col overflow-hidden">
+        <div data-tour="sidebar" className="w-80 shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex flex-col overflow-hidden">
           {/* Tabs */}
-          <div className="flex border-b border-neutral-200 dark:border-neutral-700 shrink-0">
+          <div data-tour="tabs" className="flex border-b border-neutral-200 dark:border-neutral-700 shrink-0">
             {TAB_META.map(tab => (
               <button
                 key={tab.id}
@@ -993,13 +1056,30 @@ export default function Home() {
         />
       )}
 
-      {/* Actions menu — same skill list as "/", reachable without typing */}
-      {actionsMenu.open && (
-        <SlashMenu
-          skills={skills} hasSelection={hasSelection} position={actionsMenu.position} query=""
-          onSelect={runSkill}
-          onClose={() => setActionsMenu(m => ({ ...m, open: false }))}
-          onEditPrompt={skill => { setActionsMenu(m => ({ ...m, open: false })); setEditPromptSkill(skill) }}
+      {paletteOpen && (
+        <CommandPalette
+          skills={skills}
+          hasSelection={hasSelection}
+          onRun={launchSkill}
+          onShowcase={skillId => { setPaletteOpen(false); setShowcase({ skillId }) }}
+          onClose={() => setPaletteOpen(false)}
+        />
+      )}
+
+      {showcase && (
+        <ActionShowcase
+          skills={skills}
+          initialSkillId={showcase.skillId}
+          onRun={launchSkill}
+          onClose={() => setShowcase(null)}
+        />
+      )}
+
+      {tourOpen && (
+        <GuidedTour
+          steps={buildTourSteps(isMac)}
+          onClose={closeTour}
+          finishAction={{ label: 'Open the showcase', onClick: () => setShowcase({}) }}
         />
       )}
 
